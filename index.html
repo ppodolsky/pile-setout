@@ -25,6 +25,7 @@
         <span>Preset</span>
         <select id="preset"></select>
       </label>
+      <p class="hint preset-hint" id="presetHint"></p>
       <div id="comboBar" class="combo-bar" hidden></div>
       <table class="tbl coords" id="coords">
         <thead><tr><th>Pile</th><th>X, mm</th><th>Y, mm</th><th></th></tr></thead>
@@ -69,6 +70,7 @@
       </div>
       <div id="plan" class="plan"></div>
       <p class="hint">Arrow — where to move the pile: from its actual position to the design position. Numbered badges give the move order. Hover a pile card below to highlight it here.</p>
+      <p class="hint"><b>Exaggerate offsets:</b> pile errors are a few millimetres while the field is metres long, so true-scale arrows would be invisible. Arrows on this plan are drawn ×N longer to show direction; the numbers next to them are the real offsets in mm. The move cards below are zoomed in and drawn at true scale.</p>
     </div>
 
     <div class="card" id="movesCard">
@@ -95,7 +97,7 @@
 
 <footer class="wrap foot">
   <p>All calculations run in the browser; no data is sent anywhere. Method: non-linear least squares over the measurements (trilateration) + a search for the rigid placement of the design field that needs the fewest moves (for each angle, an exact solution of the tolerance-circle coverage problem). Minimality is confirmed either by a lower bound from conflicting pairs or by an exhaustive angle search; if the check does not finish, the plan is shown marked "optimality not confirmed". Each pile is moved at most once.</p>
-  <p>Corner-casting dimensions per ISO 668 (Annex A): S/P for 10', 20' and 40' = 2787/5853/11985 × 2259 mm. Sources: <a href="https://standards.isodoc.my/iso/ISO%20668-2020%20PDF.pdf" target="_blank" rel="noopener">ISO 668:2020</a>, <a href="https://www.william-cook.co.uk/_media/images/client-uploads/corners.pdf" target="_blank" rel="noopener">William Cook — ISO corner castings</a>. Intermediate supports (including the middle supports of the 20' field) are an editable starting point: before pouring concrete, check their contact with the longitudinal beams of the actual container (measure the gap with a feeler gauge with the container resting on its corner castings).</p>
+  <p>Corner-casting dimensions per ISO 668 (Annex A): S/P for 10', 20' and 40' = 2787/5853/11985 × 2259 mm. Sources: <a href="https://standards.isodoc.my/iso/ISO%20668-2020%20PDF.pdf" target="_blank" rel="noopener">ISO 668:2020</a>, <a href="https://www.william-cook.co.uk/_media/images/client-uploads/corners.pdf" target="_blank" rel="noopener">William Cook — ISO corner castings</a>. In a container combination, each joint between two containers sits on one shared pile on the joint line; its cap is lengthened to 2 × (end-to-aperture offset) + 200 ≈ 405 mm so it fully carries both corner castings. Intermediate supports (including the middle supports of the 20' field) are an editable starting point: before pouring concrete, check their contact with the longitudinal beams of the actual container (measure the gap with a feeler gauge with the container resting on its corner castings).</p>
 </footer>
 
 <script src="app.js"></script>

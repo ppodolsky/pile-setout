@@ -8,23 +8,31 @@ const CONTAINERS = {
 };
 const RAIL_Y = [89.5, 2348.5]; // P = 2259 per ISO 668 (Annex A)
 
-/** Builds the pile field for a sequence of containers joined end to end (short sides touching). */
+const CAP = 200; // pile cap size, mm
+
+/**
+ * Builds the pile field for a sequence of containers joined end to end (short sides touching).
+ * At every joint the two neighbouring corner castings sit on ONE shared pile placed on the
+ * joint line; its cap is lengthened along X so it carries both castings completely.
+ */
 function buildField(types) {
   const outline = [];
-  const xsAll = [];
+  const cols = []; // pile columns along the field: {x, cap, shared}
   let x0 = 0;
-  for (const t of types) {
+  types.forEach((t, k) => {
     const c = CONTAINERS[t];
-    const xs = [c.cast, c.L - c.cast];
-    if (c.mid) xs.push(c.mid);
-    if (c.mids) xs.push(...c.mids);
-    for (const x of xs) xsAll.push(x0 + x);
+    const next = CONTAINERS[types[k + 1]];
+    if (k === 0) cols.push({ x: c.cast, cap: CAP });
+    for (const m of [c.mid, ...(c.mids || [])]) if (m) cols.push({ x: x0 + m, cap: CAP });
+    if (next) cols.push({ x: x0 + c.L, cap: 2 * Math.max(c.cast, next.cast) + CAP, shared: true });
+    else cols.push({ x: x0 + c.L - c.cast, cap: CAP });
     outline.push({ x0, L: c.L, W: 2438, cast: c.cast, pockets: !!c.pockets });
     x0 += c.L;
-  }
-  const ux = [...new Set(xsAll)].sort((a, b) => a - b);
+  });
+  cols.sort((a, b) => a.x - b.x);
   const piles = [];
-  for (const y of RAIL_Y) for (const x of ux) piles.push({ label: '', x, y });
+  for (const y of RAIL_Y) for (const col of cols)
+    piles.push({ label: '', x: col.x, y, cap: col.cap, shared: !!col.shared });
   piles.forEach((p, i) => p.label = 'C' + (i + 1));
   return { piles, outline };
 }
@@ -58,11 +66,16 @@ function defaultMeas(piles) {
 }
 
 const PRESETS = {
-  c10:    { name: "10' — axes at corner castings" },
-  c20:    { name: "20' — axes at corner castings" },
-  c20in:  { name: "20' — axes inside the footprint" },
-  c40:    { name: "40' — castings + intermediate supports" },
-  combo:  { name: "Container combination (builder)" },
+  c10:    { name: "10' — piles under corner castings",
+            hint: "4 piles centred under the ISO corner-casting apertures (102 mm from the ends, 89.5 mm from the sides)." },
+  c20:    { name: "20' — piles under corner castings",
+            hint: "Piles centred exactly under the ISO corner-casting apertures (102.5 mm from the ends, 89.5 mm from the sides), plus a middle pair under the side rails. The 200 mm caps overhang the container outline by ~10 mm on the long sides." },
+  c20in:  { name: "20' — piles inset 110 mm (caps inside outline)",
+            hint: "Same 6 piles, but each pile axis is set 110 mm in from both container edges, so a 200 mm cap stays 10 mm inside the outline and nothing sticks out. The corner castings still bear on the caps (offset ~8–20 mm from the aperture centres). Use it when caps must not project beyond the container." },
+  c40:    { name: "40' — corner castings + intermediate supports",
+            hint: "Corner-casting piles plus two intermediate pairs at 3048 / 9144 mm (quarter points) under the side rails." },
+  combo:  { name: "Container combination (builder)",
+            hint: "Containers joined end to end. At every joint one shared pile on the joint line carries both containers' corner castings; its cap is lengthened (≈405 mm) to fully support both." },
 };
 
 /* ============================== state ============================== */
@@ -80,6 +93,7 @@ const state = {
 
 function applyPreset(key) {
   state.preset = key;
+  $('#presetHint').textContent = PRESETS[key].hint;
   state.pinned = new Set();
   renderComboBar(); // combo panel visibility is refreshed on every switch
   if (key === 'combo') {
@@ -498,7 +512,7 @@ function renderComboBar() {
     </div>
     <div class="combo-chips">${state.containers.map((t, i) =>
       `<span class="chip">${CONTAINERS[t].label}<button data-rm="${i}" title="Remove">×</button></span>`).join('')
-      || '<span class="hint" style="margin:0">Add containers — they are joined end to end along the short side.</span>'}</div>`;
+      || '<span class="hint" style="margin:0">Add containers — they are joined end to end along the short side; each joint sits on one shared pile.</span>'}</div>`;
 }
 
 /* ============================== render: measurements ============================== */
@@ -722,6 +736,7 @@ function renderMoves(res) {
       <div class="mv-head">${head}</div>
       ${moveDiagram(c, state.tol, moving)}
       <div class="mv-dirs">${moving ? moveDirections(c, sides) : '<div class="ok">within tolerance — leave it</div>'}</div>
+      ${p.shared ? '<div class="mv-shared" title="One pile carries the corner castings of both neighbouring containers">shared joint pile</div>' : ''}
       <div class="mv-foot">${pinButton(p.label)}</div>
     </div>`;
   });
@@ -882,7 +897,11 @@ function renderPlan(res) {
     const fx = pos[i][0], fy = pos[i][1];
     const [dx, dy] = mapD(p.x, p.y);
     s += `<g class="pile" data-label="${esc(p.label)}">`;
-    s += `<rect x="${dx - 100}" y="${dy - 100}" width="200" height="200" fill="none" stroke="#9aa0a8" stroke-width="5" opacity="0.8"><title>Pile cap 200×200 — design, ${esc(p.label)}</title></rect>`;
+    const cap = p.cap || CAP;
+    const capTitle = p.shared
+      ? `Shared pile cap ${fmt(cap)}×${CAP} — carries the corner castings of both containers, ${esc(p.label)}`
+      : `Pile cap ${fmt(cap)}×${CAP} — design, ${esc(p.label)}`;
+    s += `<rect x="${dx - cap / 2}" y="${dy - CAP / 2}" width="${cap}" height="${CAP}" fill="${p.shared ? 'rgba(1,105,111,0.10)' : 'none'}" stroke="${p.shared ? '#01696f' : '#9aa0a8'}" stroke-width="5" opacity="0.8"><title>${capTitle}</title></rect>`;
     s += `<circle cx="${fx}" cy="${fy}" r="${26 * z}" fill="#c2410c"><title>${esc(p.label)}: actual position</title></circle>`;
     let badge = '';
     if (allowArrows) {
@@ -893,7 +912,12 @@ function renderPlan(res) {
         const hl = 90 * z;
         s += `<line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" stroke="#c2410c" stroke-width="${14 * z}"/>`;
         s += `<path d="M${tx} ${ty} L${tx - hl * Math.cos(ax - 0.42)} ${ty - hl * Math.sin(ax - 0.42)} L${tx - hl * Math.cos(ax + 0.42)} ${ty - hl * Math.sin(ax + 0.42)} Z" fill="#c2410c"/>`;
-        s += `<text x="${tx + 60 * z * Math.sign(Math.cos(ax) || 1)}" y="${ty - 40 * z}" font-size="${95 * z}" fill="#c2410c" font-weight="600" text-anchor="${Math.cos(ax) >= 0 ? 'start' : 'end'}">${fmt(c.mag)}</text>`;
+        const txt = fmt(c.mag), tw = 0.62 * 95 * z * txt.length;
+        let right = Math.cos(ax) >= 0;
+        if (right && tx + 60 * z + tw > vb.x + vb.w) right = false;
+        else if (!right && tx - 60 * z - tw < vb.x) right = true;
+        const ly = ty - 40 * z < vb.y + 95 * z ? ty + 130 * z : ty - 40 * z;
+        s += `<text x="${tx + (right ? 60 : -60) * z}" y="${ly}" font-size="${95 * z}" fill="#c2410c" font-weight="600" text-anchor="${right ? 'start' : 'end'}">${txt}</text>`;
         const n = res.steps.get(p.label);
         badge = `<circle cx="${dx + 175 * z}" cy="${dy - 155 * z}" r="${68 * z}" fill="#c2410c"/><text x="${dx + 175 * z}" y="${dy - 122 * z}" font-size="${95 * z}" fill="#fff" font-weight="700" text-anchor="middle">${n}</text>`;
       } else if (c) {

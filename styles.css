@@ -134,6 +134,8 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 
 .meas-row select { padding-right: var(--space-5); }
 
+.hint.preset-hint { margin: calc(-1 * var(--space-1)) 0 var(--space-3); }
+.hint b { font-weight: 600; color: var(--color-text); }
 .hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-3); max-width: 60ch; }
 
 /* advice panel */
@@ -195,6 +197,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .mv-dirs b { font-family: var(--font-mono); font-weight: 600; }
 .mv-arr { display: inline-block; width: 1.3em; color: var(--color-accent); font-weight: 700; }
 .mv-to { color: var(--color-text-muted); font-size: var(--text-xs); }
+.mv-shared { font-size: var(--text-xs); color: var(--color-primary); font-weight: 600; }
 .mv-none { color: var(--color-text-faint); font-size: var(--text-sm); padding: var(--space-4) 0; text-align: center; }
 .mv-foot { margin-top: auto; }
 .mv-foot .pin-btn { min-width: 0; width: 100%; }
