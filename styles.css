@@ -158,6 +158,11 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .plan svg { width: 100%; height: auto; display: block; }
 .plan text { font-family: var(--font-mono); }
 
+/* pile head + inset inputs */
+.head-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); align-items: end; }
+.head-row .field { margin-bottom: 0; }
+input.invalid { border-color: var(--color-err); box-shadow: 0 0 0 3px rgba(179,38,30,0.12); }
+
 /* plan: hover highlight from the move cards */
 .plan g.pile { transition: opacity var(--transition-interactive); }
 .plan svg.focus g.pile:not(.on) { opacity: 0.22; }

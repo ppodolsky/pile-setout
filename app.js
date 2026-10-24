@@ -6,33 +6,39 @@ const CONTAINERS = {
   '20': { label: "20'", L: 6058,  cast: 102.5, mid: 3029, pockets: true },
   '40': { label: "40'", L: 12192, cast: 103.5, mids: [3048, 9144] },
 };
-const RAIL_Y = [89.5, 2348.5]; // P = 2259 per ISO 668 (Annex A)
+const CONTAINER_W = 2438;
 
-const CAP = 200; // pile cap size, mm
+/** Allowed range for the pile head side and inset, mm. */
+const HEAD_RANGE = [50, 1000];
+const INSET_RANGE = [0, 500];
 
 /**
  * Builds the pile field for a sequence of containers joined end to end (short sides touching).
- * At every joint the two neighbouring corner castings sit on ONE shared pile placed on the
- * joint line; its cap is lengthened along X so it carries both castings completely.
+ *
+ * Every pile has the same square head, `head` mm per side. `inset` is the distance from the
+ * container's outer edge (the string line) to the outer side of the head; 0 = head flush with
+ * the edge. So a corner pile's centre sits `inset + head/2` in from the end and from the long side.
+ * At every joint the two neighbouring containers share ONE pile centred on the joint line.
  */
-function buildField(types) {
+function buildField(types, head, inset) {
   const outline = [];
-  const cols = []; // pile columns along the field: {x, cap, shared}
+  const cols = []; // pile columns along the field: {x, shared}
+  const e = inset + head / 2; // pile centre from a container end / long side
   let x0 = 0;
   types.forEach((t, k) => {
     const c = CONTAINERS[t];
-    const next = CONTAINERS[types[k + 1]];
-    if (k === 0) cols.push({ x: c.cast, cap: CAP });
-    for (const m of [c.mid, ...(c.mids || [])]) if (m) cols.push({ x: x0 + m, cap: CAP });
-    if (next) cols.push({ x: x0 + c.L, cap: 2 * Math.max(c.cast, next.cast) + CAP, shared: true });
-    else cols.push({ x: x0 + c.L - c.cast, cap: CAP });
-    outline.push({ x0, L: c.L, W: 2438, cast: c.cast, pockets: !!c.pockets });
+    const next = types[k + 1];
+    if (k === 0) cols.push({ x: e });
+    for (const m of [c.mid, ...(c.mids || [])]) if (m) cols.push({ x: x0 + m });
+    if (next) cols.push({ x: x0 + c.L, shared: true });
+    else cols.push({ x: x0 + c.L - e });
+    outline.push({ x0, L: c.L, W: CONTAINER_W, cast: c.cast, pockets: !!c.pockets });
     x0 += c.L;
   });
   cols.sort((a, b) => a.x - b.x);
   const piles = [];
-  for (const y of RAIL_Y) for (const col of cols)
-    piles.push({ label: '', x: col.x, y, cap: col.cap, shared: !!col.shared });
+  for (const y of [e, CONTAINER_W - e]) for (const col of cols)
+    piles.push({ label: '', x: col.x, y, shared: !!col.shared });
   piles.forEach((p, i) => p.label = 'C' + (i + 1));
   return { piles, outline };
 }
@@ -66,23 +72,23 @@ function defaultMeas(piles) {
 }
 
 const PRESETS = {
-  c10:    { name: "10' — piles under corner castings",
-            hint: "4 piles centred under the ISO corner-casting apertures (102 mm from the ends, 89.5 mm from the sides)." },
-  c20:    { name: "20' — piles under corner castings",
-            hint: "Piles centred exactly under the ISO corner-casting apertures (102.5 mm from the ends, 89.5 mm from the sides), plus a middle pair under the side rails. The 200 mm caps overhang the container outline by ~10 mm on the long sides." },
-  c20in:  { name: "20' — piles inset 110 mm (caps inside outline)",
-            hint: "Same 6 piles, but each pile axis is set 110 mm in from both container edges, so a 200 mm cap stays 10 mm inside the outline and nothing sticks out. The corner castings still bear on the caps (offset ~8–20 mm from the aperture centres). Use it when caps must not project beyond the container." },
-  c40:    { name: "40' — corner castings + intermediate supports",
-            hint: "Corner-casting piles plus two intermediate pairs at 3048 / 9144 mm (quarter points) under the side rails." },
-  combo:  { name: "Container combination (builder)",
-            hint: "Containers joined end to end. At every joint one shared pile on the joint line carries both containers' corner castings; its cap is lengthened (≈405 mm) to fully support both." },
+  c10:    { types: ['10'], name: "10' container",
+            hint: "4 corner piles." },
+  c20:    { types: ['20'], name: "20' container",
+            hint: "4 corner piles plus a middle pair under the side rails (3029 mm)." },
+  c40:    { types: ['40'], name: "40' container",
+            hint: "4 corner piles plus two intermediate pairs under the side rails at the quarter points (3048 / 9144 mm)." },
+  combo:  { types: null, name: "Container combination (builder)",
+            hint: "Containers joined end to end. Each joint sits on one shared pile centred on the joint line, carrying the corner castings of both containers." },
 };
 
 /* ============================== state ============================== */
 const state = {
-  piles: [],           // [{label, x, y}] — design
+  piles: [],           // [{label, x, y, shared?}] — design
   outline: [],         // [{x0, L, W, cast, pockets}] — container outlines
   meas: [],            // [{a, b, value}]
+  head: 200,           // square pile head side, mm
+  inset: 0,            // container edge → outer side of the head, mm
   tol: 3,
   exagg: 10,
   showEdges: true,
@@ -95,34 +101,26 @@ function applyPreset(key) {
   state.preset = key;
   $('#presetHint').textContent = PRESETS[key].hint;
   state.pinned = new Set();
-  renderComboBar(); // combo panel visibility is refreshed on every switch
-  if (key === 'combo') {
-    rebuildCombo();
-    return;
-  }
-  let built;
-  if (key === 'c10') built = buildField(['10']);
-  else if (key === 'c40') built = buildField(['40']);
-  else built = buildField(['20']);
-  if (key === 'c20in') {
-    built.piles = [
-      { label: 'C1', x: 110, y: 110 }, { label: 'C2', x: 3029, y: 110 }, { label: 'C3', x: 5948, y: 110 },
-      { label: 'C4', x: 110, y: 2328 }, { label: 'C5', x: 3029, y: 2328 }, { label: 'C6', x: 5948, y: 2328 },
-    ];
-  }
-  state.piles = built.piles;
-  state.outline = built.outline;
-  state.meas = defaultMeas(built.piles);
-  renderCoords();
-  renderMeas();
-  renderResults();
+  rebuildField(false);
 }
 
 function rebuildCombo() {
-  const built = buildField(state.containers);
+  rebuildField(false);
+}
+
+/**
+ * Regenerates the design piles from the preset, head size and inset.
+ * With `keepMeas` the entered measurements survive when the pile labels are unchanged
+ * (head/inset edits move the piles but keep the same set).
+ */
+function rebuildField(keepMeas) {
+  const types = PRESETS[state.preset].types || state.containers;
+  const built = buildField(types, state.head, state.inset);
+  const labels = new Set(built.piles.map(p => p.label));
+  const keep = keepMeas && state.meas.every(m => labels.has(m.a) && labels.has(m.b));
   state.piles = built.piles;
   state.outline = built.outline;
-  state.meas = defaultMeas(built.piles);
+  if (!keep) state.meas = defaultMeas(built.piles);
   renderComboBar();
   renderCoords();
   renderMeas();
@@ -897,11 +895,11 @@ function renderPlan(res) {
     const fx = pos[i][0], fy = pos[i][1];
     const [dx, dy] = mapD(p.x, p.y);
     s += `<g class="pile" data-label="${esc(p.label)}">`;
-    const cap = p.cap || CAP;
+    const hd = state.head;
     const capTitle = p.shared
-      ? `Shared pile cap ${fmt(cap)}×${CAP} — carries the corner castings of both containers, ${esc(p.label)}`
-      : `Pile cap ${fmt(cap)}×${CAP} — design, ${esc(p.label)}`;
-    s += `<rect x="${dx - cap / 2}" y="${dy - CAP / 2}" width="${cap}" height="${CAP}" fill="${p.shared ? 'rgba(1,105,111,0.10)' : 'none'}" stroke="${p.shared ? '#01696f' : '#9aa0a8'}" stroke-width="5" opacity="0.8"><title>${capTitle}</title></rect>`;
+      ? `Shared pile head ${fmt(hd)}×${fmt(hd)} — carries the corner castings of both containers, ${esc(p.label)}`
+      : `Pile head ${fmt(hd)}×${fmt(hd)} — design, ${esc(p.label)}`;
+    s += `<rect x="${dx - hd / 2}" y="${dy - hd / 2}" width="${hd}" height="${hd}" fill="${p.shared ? 'rgba(1,105,111,0.10)' : 'none'}" stroke="${p.shared ? '#01696f' : '#9aa0a8'}" stroke-width="5" opacity="0.8"><title>${capTitle}</title></rect>`;
     s += `<circle cx="${fx}" cy="${fy}" r="${26 * z}" fill="#c2410c"><title>${esc(p.label)}: actual position</title></circle>`;
     let badge = '';
     if (allowArrows) {
@@ -1034,6 +1032,24 @@ $('#moveGrid').addEventListener('mouseover', e => {
   highlightPile(tile ? tile.dataset.label : null);
 });
 $('#moveGrid').addEventListener('mouseleave', () => highlightPile(null));
+
+// pile head size and inset: validate, then regenerate the design piles (measurements are kept)
+function readRange(el, [lo, hi]) {
+  const v = parseNum(el.value);
+  const ok = v != null && v >= lo && v <= hi;
+  el.classList.toggle('invalid', !ok);
+  return ok ? v : null;
+}
+for (const id of ['#head', '#inset']) {
+  $(id).addEventListener('input', () => {
+    const head = readRange($('#head'), HEAD_RANGE);
+    const inset = readRange($('#inset'), INSET_RANGE);
+    if (head == null || inset == null) return;
+    state.head = head;
+    state.inset = inset;
+    rebuildField(true);
+  });
+}
 
 $('#tol').addEventListener('input', e => {
   const v = parseNum(e.target.value);
