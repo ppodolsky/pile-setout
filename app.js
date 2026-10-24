@@ -848,34 +848,40 @@ function renderPlan(res) {
     const dx = x - T.dcx, dy = y - T.dcy;
     return [T.dcx + T.R[0] * dx - T.R[1] * dy + T.t.x, T.dcy + T.R[1] * dx + T.R[0] * dy + T.t.y];
   };
+  // the same rigid map as an SVG transform: shapes drawn in design coordinates
+  // (outlines, castings, pile heads) are rotated exactly, not approximated by axis-aligned boxes
+  const designFrame = (() => {
+    if (!T) return '';
+    const [a, b] = T.R;
+    const e = T.dcx - a * T.dcx + b * T.dcy + T.t.x;
+    const f = T.dcy - b * T.dcx - a * T.dcy + T.t.y;
+    return `transform="matrix(${a} ${b} ${-b} ${a} ${e} ${f})"`;
+  })();
 
   let s = `<svg viewBox="${vb.x} ${vb.y} ${vb.w} ${vb.h}" role="img" aria-label="Pile field plan">`;
   s += `<defs><pattern id="grid" width="500" height="500" patternUnits="userSpaceOnUse">
     <path d="M500 0H0V500" fill="none" stroke="#d8d5cd" stroke-width="4"/></pattern></defs>`;
   s += `<rect x="${vb.x}" y="${vb.y}" width="${vb.w}" height="${vb.h}" fill="url(#grid)"/>`;
 
-  // container outlines
+  // container outlines (design coordinates, placed by the alignment transform)
+  s += `<g ${designFrame}>`;
   for (const o of outlines) {
-    const [rx, ry] = mapD(o.x0, 0);
-    const [rx2, ry2] = mapD(o.x0 + o.L, o.W);
-    s += `<rect x="${rx}" y="${ry}" width="${rx2 - rx}" height="${ry2 - ry}" fill="#eceee9" stroke="#5b6470" stroke-width="8"/>`;
+    s += `<rect x="${o.x0}" y="0" width="${o.L}" height="${o.W}" fill="#eceee9" stroke="#5b6470" stroke-width="8"/>`;
     // corner castings
     const cs = [[o.cast, 89.5], [o.L - o.cast, 89.5], [o.cast, o.W - 89.5], [o.L - o.cast, o.W - 89.5]];
     for (const [cx, cy] of cs) {
-      const [mx, my] = mapD(o.x0 + cx, cy);
-      s += `<rect x="${mx - 89}" y="${my - 81}" width="178" height="162" fill="none" stroke="#5b6470" stroke-width="4" opacity="0.7"><title>Corner casting</title></rect>`;
+      s += `<rect x="${o.x0 + cx - 89}" y="${cy - 81}" width="178" height="162" fill="rgba(91,100,112,0.10)" stroke="#5b6470" stroke-width="3" stroke-dasharray="14 10" opacity="0.8"><title>Container corner casting (178×162)</title></rect>`;
     }
     // forklift pockets (20' only)
     if (o.pockets) {
       for (const px of [2005, 4053]) {
-        for (const [yy, hh] of [[0, 160], [o.W - 160, 160]]) {
-          const [px1, py1] = mapD(o.x0 + px - 177.5, yy);
-          const [px2, py2] = mapD(o.x0 + px + 177.5, yy + hh);
-          s += `<rect x="${px1}" y="${py1}" width="${px2 - px1}" height="${py2 - py1}" fill="#5b6470" opacity="0.18"><title>Forklift pocket (schematic)</title></rect>`;
+        for (const yy of [0, o.W - 160]) {
+          s += `<rect x="${o.x0 + px - 177.5}" y="${yy}" width="355" height="160" fill="#5b6470" opacity="0.18"><title>Forklift pocket (schematic)</title></rect>`;
         }
       }
     }
   }
+  s += `</g>`;
 
   // measurement lines
   if (state.showEdges && res && res.fit) {
@@ -899,7 +905,7 @@ function renderPlan(res) {
     const capTitle = p.shared
       ? `Shared pile head ${fmt(hd)}×${fmt(hd)} — carries the corner castings of both containers, ${esc(p.label)}`
       : `Pile head ${fmt(hd)}×${fmt(hd)} — design, ${esc(p.label)}`;
-    s += `<rect x="${dx - hd / 2}" y="${dy - hd / 2}" width="${hd}" height="${hd}" fill="${p.shared ? 'rgba(1,105,111,0.10)' : 'none'}" stroke="${p.shared ? '#01696f' : '#9aa0a8'}" stroke-width="5" opacity="0.8"><title>${capTitle}</title></rect>`;
+    s += `<rect ${designFrame} x="${p.x - hd / 2}" y="${p.y - hd / 2}" width="${hd}" height="${hd}" fill="${p.shared ? 'rgba(1,105,111,0.10)' : 'none'}" stroke="${p.shared ? '#01696f' : '#9aa0a8'}" stroke-width="5" opacity="0.8"><title>${capTitle}</title></rect>`;
     s += `<circle cx="${fx}" cy="${fy}" r="${26 * z}" fill="#c2410c"><title>${esc(p.label)}: actual position</title></circle>`;
     let badge = '';
     if (allowArrows) {

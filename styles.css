@@ -172,6 +172,7 @@ input.invalid { border-color: var(--color-err); box-shadow: 0 0 0 3px rgba(179,3
 #summary { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4); }
 .move-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-3); }
 .move-legend > span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.plan-legend { margin: var(--space-3) 0 0; }
 .move-scroll { overflow-x: auto; padding-bottom: var(--space-1); }
 .mv-grid { display: grid; gap: var(--space-3); }
 .mv-grid.flow { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
