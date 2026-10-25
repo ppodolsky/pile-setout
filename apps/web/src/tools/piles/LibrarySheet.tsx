@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { uid } from '@/lib/id';
 import { cn } from '@/lib/utils';
-import { duplicateSketch, openSketch, saveCurrent, sketches, TOOL_ID } from './model/library';
+import { useAuth } from '@/app/backend/auth';
+import { duplicateSketch, openSketch, saveCurrent, sketchStore, TOOL_ID } from './model/library';
 import { useProject } from './model/store';
 
 const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -15,21 +16,26 @@ const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: '
 /** The sketch library: rename the current sketch, open / duplicate / delete others, start a new one. */
 export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const current = useProject((s) => s.sketch);
+  const account = useAuth((s) => s.account);
   const [items, setItems] = useState<SketchMeta[]>([]);
   const refresh = async () => {
     await saveCurrent();
-    setItems(await sketches.list(TOOL_ID));
+    setItems(await sketchStore().list(TOOL_ID));
   };
   useEffect(() => {
     if (open) void refresh();
-  }, [open, current]);
+  }, [open, current, account]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Sketches</SheetTitle>
-          <SheetDescription>Saved automatically in this browser. Export to a file to move a sketch to another device.</SheetDescription>
+          <SheetDescription>
+            {account
+              ? `Saved automatically and synced to ${account.email}.`
+              : 'Saved automatically in this browser. Sign in to sync across devices, or export a file.'}
+          </SheetDescription>
         </SheetHeader>
         <div className="space-y-4 overflow-y-auto px-4 pb-6">
           <div className="space-y-1.5">
@@ -103,7 +109,7 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   disabled={m.id === current.id}
                   onClick={async () => {
                     if (!confirm(`Delete “${m.name}”? This cannot be undone.`)) return;
-                    await sketches.remove(m.id);
+                    await sketchStore().remove(m.id);
                     await refresh();
                   }}
                 >

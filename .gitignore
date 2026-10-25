@@ -7,3 +7,6 @@ playwright-report/
 .DS_Store
 apps/web/test-results/
 apps/web/playwright-report/
+.env*.local
+supabase/.temp/
+supabase/.branches/

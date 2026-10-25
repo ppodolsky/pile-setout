@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { AccountMenu } from './AccountMenu';
 import { useTheme, type ThemePref } from './theme';
 import { TOOLS } from './tools';
 
@@ -52,6 +53,7 @@ export function AppShell() {
 
           <div className="flex items-center gap-1">
             {ProjectMenu && <ProjectMenu />}
+            <AccountMenu />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Theme">

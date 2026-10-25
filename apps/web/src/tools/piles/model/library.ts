@@ -1,12 +1,27 @@
-import { localSketchStore, type SketchStore } from '@/app/library';
+import { useAuth } from '@/app/backend/auth';
+import { supabase } from '@/app/backend/supabase';
+import { cloudSketchStore, localSketchStore, syncedSketchStore, type SketchStore } from '@/app/library';
 import { pilesOf } from './deps';
 import type { ProjectData } from './project';
 import { useProject, type SketchIdentity } from './store';
 
 export const TOOL_ID = 'piles';
 
-/** The library backend in use (local for now; a cloud one can be swapped in here). */
-export const sketches: SketchStore = localSketchStore;
+let synced: ReturnType<typeof syncedSketchStore> | null = null;
+
+/** The library in use: this device, plus the cloud while signed in. */
+export function sketchStore(): SketchStore {
+  if (!supabase || !useAuth.getState().account) return localSketchStore;
+  synced ??= syncedSketchStore(localSketchStore, cloudSketchStore(supabase), (e) => console.warn('cloud sync:', e));
+  return synced;
+}
+
+// signing in brings this device and the account in step
+useAuth.subscribe((s, prev) => {
+  if (s.account?.id === prev.account?.id) return;
+  synced = null;
+  if (s.account) void saveCurrent().then(() => (sketchStore() as ReturnType<typeof syncedSketchStore>).sync(TOOL_ID));
+});
 
 const summary = (d: ProjectData) => {
   const piles = pilesOf(d.design.doc).length;
@@ -18,7 +33,7 @@ const summary = (d: ProjectData) => {
 export function saveCurrent(): Promise<void> {
   const { sketch, design, fieldwork, view } = useProject.getState();
   const data: ProjectData = { design, fieldwork, view };
-  return sketches.save({ id: sketch.id, tool: TOOL_ID, name: sketch.name, updatedAt: Date.now(), summary: summary(data), data });
+  return sketchStore().save({ id: sketch.id, tool: TOOL_ID, name: sketch.name, updatedAt: Date.now(), summary: summary(data), data });
 }
 
 /** Keeps the library copy of the current sketch up to date (debounced). Call once at start-up. */
@@ -37,7 +52,7 @@ export function startAutosave(): () => void {
 }
 
 export async function openSketch(id: string): Promise<boolean> {
-  const stored = await sketches.load<ProjectData>(id);
+  const stored = await sketchStore().load<ProjectData>(id);
   if (!stored) return false;
   await saveCurrent();
   const identity: SketchIdentity = { id: stored.id, name: stored.name };
@@ -46,7 +61,7 @@ export async function openSketch(id: string): Promise<boolean> {
 }
 
 export async function duplicateSketch(id: string, newId: string): Promise<void> {
-  const stored = await sketches.load<ProjectData>(id);
+  const stored = await sketchStore().load<ProjectData>(id);
   if (!stored) return;
-  await sketches.save({ ...stored, id: newId, name: `${stored.name} (copy)`, updatedAt: Date.now() });
+  await sketchStore().save({ ...stored, id: newId, name: `${stored.name} (copy)`, updatedAt: Date.now() });
 }
