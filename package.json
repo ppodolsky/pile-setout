@@ -1,0 +1,23 @@
+{
+  "name": "buildkit",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "dev": "pnpm --filter @buildkit/web dev",
+    "build": "pnpm --filter @buildkit/web build",
+    "preview": "pnpm --filter @buildkit/web preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "pnpm --filter @buildkit/web e2e",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
