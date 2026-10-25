@@ -55,6 +55,9 @@ input, button, select { transition: border-color var(--transition-interactive), 
   margin-bottom: var(--space-6);
 }
 .top h1 { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.01em; }
+.top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.session { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); font-size: var(--text-xs); color: var(--color-text-muted); }
+.session .ghost { background: var(--color-surface-2); }
 .top .sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: var(--space-1); }
 
 .wrap { max-width: 1240px; margin: 0 auto; padding: 0 var(--space-5); }
@@ -122,17 +125,29 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .toolbar .field.inline span { font-size: var(--text-xs); color: var(--color-text-muted); }
 .toolbar input[type="number"] { width: 84px; }
 
-/* measurement rows */
-.meas-row { display: grid; grid-template-columns: 1fr 1fr 112px 64px 32px; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); }
+/* measurement rows: pair + reading on one line, correction on a compact second line */
+.meas-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--color-divider); }
+.meas-row:first-child { padding-top: 0; }
+.meas-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) 52px 24px; gap: var(--space-2); align-items: center; }
+.meas-corr { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--color-text-faint); }
+.meas-corr.set { color: var(--color-text-muted); }
+.meas-corr input[type="number"] { width: 64px; padding: 2px var(--space-2); font-size: var(--text-xs); }
+.lbl-short { display: none; }
+.meas-corr .corr-eff { font-family: var(--font-mono); color: var(--color-text-muted); }
+.seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button { padding: 1px var(--space-2); font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text-muted); background: var(--color-surface-2); }
+.seg button + button { border-left: 1px solid var(--color-border); }
+.seg button.on { background: var(--color-primary); color: #fff; }
+#addMeas { margin-top: var(--space-3); }
 .meas-row .arrow-sep { color: var(--color-text-faint); text-align: center; font-family: var(--font-mono); }
 .meas-row .delta { font-family: var(--font-mono); font-size: var(--text-xs); text-align: right; white-space: nowrap; }
-.meas-row button.del { color: var(--color-text-faint); font-size: var(--text-lg); line-height: 1; padding: 0 var(--space-1); }
-.meas-row button.del:hover { color: var(--color-err); }
+.meas-main button.del { color: var(--color-text-faint); font-size: var(--text-lg); line-height: 1; padding: 0 var(--space-1); }
+.meas-main button.del:hover { color: var(--color-err); }
 
 .scroll-x { overflow-x: auto; }
 .scroll-x .tbl { min-width: 520px; }
 
-.meas-row select { padding-right: var(--space-5); }
+.meas-row select { padding-right: var(--space-1); }
 
 .hint.preset-hint { margin: calc(-1 * var(--space-1)) 0 var(--space-3); }
 .hint b { font-weight: 600; color: var(--color-text); }
@@ -215,7 +230,7 @@ details.numbers[open] summary { margin-bottom: var(--space-3); }
 .foot { margin: var(--space-10) 0 var(--space-8); font-size: var(--text-xs); color: var(--color-text-muted); }
 .foot p { max-width: 72ch; }
 
-.meas-row input[type="number"] { padding-right: var(--space-3); }
+.meas-main input[type="number"] { padding-right: var(--space-1); }
 
 /* combo builder + pin buttons */
 [hidden] { display: none !important; }
@@ -244,16 +259,10 @@ details.numbers[open] summary { margin-bottom: var(--space-3); }
   .mv-tile { padding: var(--space-2); }
   .mv-to { display: block; padding-left: 1.3em; }
   .plan-tools { gap: var(--space-2) var(--space-4); }
-  .meas-row {
-    grid-template-columns: 1fr 1fr 28px;
-    grid-template-areas:
-      "a b del"
-      "value delta delta";
-  }
-  .meas-row > :nth-child(1) { grid-area: a; }
-  .meas-row > :nth-child(2) { grid-area: b; }
-  .meas-row > :nth-child(3) { grid-area: value; }
-  .meas-row > :nth-child(4) { grid-area: delta; justify-self: end; }
-  .meas-row > :nth-child(5) { grid-area: del; }
+  .meas-main { gap: var(--space-1); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) 46px 22px; }
+  .lbl-long { display: none; }
+  .lbl-short { display: inline; }
+  .meas-corr input[type="number"] { width: 56px; }
+  .meas-main select, .meas-main input { padding-left: var(--space-1); padding-right: var(--space-1); }
   .card { padding: var(--space-4); }
 }

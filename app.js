@@ -83,19 +83,77 @@ const PRESETS = {
 };
 
 /* ============================== state ============================== */
-const state = {
-  piles: [],           // [{label, x, y, shared?}] — design
-  outline: [],         // [{x0, L, W, cast, pockets}] — container outlines
-  meas: [],            // [{a, b, value}]
-  head: 200,           // square pile head side, mm
-  inset: 0,            // container edge → outer side of the head, mm
-  tol: 3,
-  exagg: 10,
-  showEdges: true,
-  preset: 'c20',
-  containers: ['10', '20'],  // for the combination builder
-  pinned: new Set(),         // "pinned" reference piles
-};
+function defaultState() {
+  return {
+    piles: [],           // [{label, x, y, shared?}] — design
+    outline: [],         // [{x0, L, W, cast, pockets}] — container outlines
+    meas: [],            // [{a, b, value, corr, end}] — tape reading, hook correction and its end ('a' | 'b')
+    head: 200,           // square pile head side, mm
+    inset: 0,            // container edge → outer side of the head, mm
+    tol: 3,
+    exagg: 10,
+    showEdges: true,
+    preset: 'c20',
+    containers: ['10', '20'],  // for the combination builder
+    pinned: new Set(),         // "pinned" reference piles
+  };
+}
+const state = defaultState();
+
+/* ============================== persistence ============================== */
+const STORAGE_KEY = 'pile-setout/v1';
+
+/** Saves everything the user entered to this browser; called after every recalculation. */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      preset: state.preset, containers: state.containers, head: state.head, inset: state.inset,
+      piles: state.piles, meas: state.meas, tol: state.tol, exagg: state.exagg,
+      showEdges: state.showEdges, pinned: [...state.pinned],
+    }));
+  } catch (_) { /* storage full or disabled — the app still works, just without persistence */ }
+}
+
+/** Restores a saved session; returns false (leaving defaults) if there is none or it is malformed. */
+function loadState() {
+  let d;
+  try { d = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (_) { return false; }
+  const num = v => typeof v === 'number' && Number.isFinite(v);
+  const numOrNull = v => v === null || num(v);
+  if (!d || !PRESETS[d.preset] || !Array.isArray(d.piles) || !Array.isArray(d.meas)) return false;
+  if (!Array.isArray(d.containers) || !d.containers.every(t => CONTAINERS[t])) return false;
+  if (!d.piles.every(p => p && typeof p.label === 'string' && num(p.x) && num(p.y))) return false;
+  if (!d.meas.every(m => m && typeof m.a === 'string' && typeof m.b === 'string' &&
+      numOrNull(m.value) && numOrNull(m.corr ?? null))) return false;
+  Object.assign(state, {
+    preset: d.preset,
+    containers: d.containers,
+    head: num(d.head) ? d.head : 200,
+    inset: num(d.inset) ? d.inset : 0,
+    piles: d.piles.map(p => ({ label: p.label, x: p.x, y: p.y, shared: !!p.shared })),
+    meas: d.meas.map(m => ({ a: m.a, b: m.b, value: m.value, corr: m.corr ?? null, end: m.end === 'b' ? 'b' : 'a' })),
+    tol: num(d.tol) && d.tol >= 0.5 ? d.tol : 3,
+    exagg: num(d.exagg) ? d.exagg : 10,
+    showEdges: d.showEdges !== false,
+    pinned: new Set(Array.isArray(d.pinned) ? d.pinned.filter(l => typeof l === 'string') : []),
+  });
+  // outlines are derived from the containers; piles stay as saved (they may have been hand-edited)
+  state.outline = buildField(PRESETS[state.preset].types || state.containers, state.head, state.inset).outline;
+  return true;
+}
+
+/** Puts the state values into the form controls (after loading or resetting). */
+function syncControls() {
+  $('#preset').value = state.preset;
+  $('#presetHint').textContent = PRESETS[state.preset].hint;
+  $('#head').value = state.head;
+  $('#inset').value = state.inset;
+  $('#tol').value = state.tol;
+  $('#exagg').value = state.exagg;
+  $('#exaggVal').textContent = state.exagg;
+  $('#edges').checked = state.showEdges;
+  for (const id of ['#head', '#inset']) $(id).classList.remove('invalid');
+}
 
 function applyPreset(key) {
   state.preset = key;
@@ -120,7 +178,7 @@ function rebuildField(keepMeas) {
   const keep = keepMeas && state.meas.every(m => labels.has(m.a) && labels.has(m.b));
   state.piles = built.piles;
   state.outline = built.outline;
-  if (!keep) state.meas = defaultMeas(built.piles);
+  if (!keep) state.meas = [];
   renderComboBar();
   renderCoords();
   renderMeas();
@@ -191,10 +249,19 @@ function matrixRank(A, eps) {
 }
 
 /* ============================== least-squares trilateration ============================== */
+/**
+ * Distance between the two nails: the tape reading minus the correction. The correction is the
+ * fixed extra length when the tape is hooked on a point behind one end's pile (it belongs to that end).
+ */
+function measLength(m) {
+  if (m.value == null) return null;
+  return m.value - (m.corr ?? 0);
+}
+
 function validMeas(design, meas) {
   const labels = new Set(design.map(p => p.label));
   return meas.filter(m =>
-    labels.has(m.a) && labels.has(m.b) && m.a !== m.b && m.value != null && m.value > 0
+    labels.has(m.a) && labels.has(m.b) && m.a !== m.b && m.value != null && measLength(m) > 0
   );
 }
 
@@ -215,7 +282,7 @@ function fit(design, meas) {
       const dx = pos[i][0] - pos[j][0], dy = pos[i][1] - pos[j][1];
       const d0 = Math.hypot(dx, dy);
       if (d0 < 1e-9) continue;
-      const ux = dx / d0, uy = dy / d0, r = m.value - d0;
+      const ux = dx / d0, uy = dy / d0, r = measLength(m) - d0;
       const rows = [[2 * i, ux], [2 * i + 1, uy], [2 * j, -ux], [2 * j + 1, -uy]];
       for (const [r1, c1] of rows) for (const [r2, c2] of rows) A[r1][r2] += c1 * c2;
       for (const [ri, ci] of rows) b[ri] += ci * r;
@@ -234,7 +301,8 @@ function fit(design, meas) {
     const i = idx.get(m.a), j = idx.get(m.b);
     const dFit = Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1]);
     const dDesign = dist(design[i], design[j]);
-    return { a: m.a, b: m.b, value: m.value, dFit, dDesign, delta: m.value - dDesign, fitErr: m.value - dFit };
+    const len = measLength(m);
+    return { a: m.a, b: m.b, value: len, reading: m.value, corr: m.corr ?? 0, dFit, dDesign, delta: len - dDesign, fitErr: len - dFit };
   });
   const rms = Math.sqrt(residuals.reduce((s, r) => s + r.fitErr * r.fitErr, 0) / residuals.length);
   return { pos, residuals, rms, used };
@@ -521,31 +589,73 @@ function pairOptions(sel) {
 function renderMeas() {
   const wrap = $('#measRows');
   if (!state.meas.length) {
-    wrap.innerHTML = '<p class="hint" style="margin:0">Add measurements: pick two piles and enter the measured distance in mm.</p>';
+    wrap.innerHTML = '<p class="hint" style="margin:0 0 var(--space-3)">No measurements yet. Each “+ add measurement” suggests the next recommended pair (along the rows, across, then diagonals) — change the piles if you measured something else.</p>';
     return;
   }
-  wrap.innerHTML = state.meas.map((m, i) => `
+  wrap.innerHTML = state.meas.map((m, i) => {
+    const endBtn = end => `<button type="button" class="${m.end === end ? 'on' : ''}" data-i="${i}" data-end="${end}" aria-pressed="${m.end === end}">${esc(m[end])}</button>`;
+    return `
     <div class="meas-row">
-      <select data-i="${i}" data-f="a">${pairOptions(m.a)}</select>
-      <select data-i="${i}" data-f="b">${pairOptions(m.b)}</select>
-      <input type="number" step="0.5" placeholder="mm" data-i="${i}" data-f="value" value="${m.value ?? ''}" aria-label="Measurement ${i + 1}, value">
-      <span class="delta" data-delta="${i}"></span>
-      <button class="del" data-i="${i}" title="Delete measurement" aria-label="Delete measurement ${i + 1}">×</button>
-    </div>`).join('');
+      <div class="meas-main">
+        <select data-i="${i}" data-f="a" aria-label="Measurement ${i + 1}, first pile">${pairOptions(m.a)}</select>
+        <select data-i="${i}" data-f="b" aria-label="Measurement ${i + 1}, second pile">${pairOptions(m.b)}</select>
+        <input type="number" inputmode="decimal" step="0.5" placeholder="reading" data-i="${i}" data-f="value" value="${m.value ?? ''}" aria-label="Measurement ${i + 1}, tape reading, mm">
+        <span class="delta" data-delta="${i}"></span>
+        <button class="del" data-i="${i}" title="Delete measurement" aria-label="Delete measurement ${i + 1}">×</button>
+      </div>
+      <div class="meas-corr ${m.corr ? 'set' : ''}">
+        <span><span class="lbl-long">− correction</span><span class="lbl-short">− corr.</span></span>
+        <input type="number" inputmode="decimal" step="0.5" min="0" placeholder="0" data-i="${i}" data-f="corr" value="${m.corr ?? ''}" aria-label="Measurement ${i + 1}, correction to subtract, mm">
+        <span>mm at</span>
+        <span class="seg" role="group" aria-label="End the correction belongs to">${endBtn('a')}${endBtn('b')}</span>
+        <span class="corr-eff" data-eff="${i}"></span>
+      </div>
+    </div>`;
+  }).join('');
   state.meas.forEach((m, i) => updateRowBadge(i));
 }
 
 function updateRowBadge(i) {
   const el = document.querySelector(`[data-delta="${i}"]`);
+  const eff = document.querySelector(`[data-eff="${i}"]`);
   if (!el) return;
   const m = state.meas[i];
+  const len = measLength(m);
+  if (eff) eff.textContent = m.corr && len != null ? `= ${fmt(len)}` : '';
   const a = state.piles.find(p => p.label === m.a);
   const b = state.piles.find(p => p.label === m.b);
-  if (!a || !b || m.value == null) { el.textContent = ''; el.className = 'delta'; return; }
-  const dv = m.value - dist(a, b);
+  if (!a || !b || len == null) { el.textContent = ''; el.className = 'delta'; return; }
+  const dv = len - dist(a, b);
   const cls = Math.abs(dv) <= state.tol ? 'ok' : Math.abs(dv) <= 3 * state.tol ? 'warn' : 'err';
   el.textContent = sfmt(dv);
   el.className = 'delta ' + cls;
+}
+
+/** The last correction entered for a pile (as the hooked end) in another measurement, if any. */
+function knownCorr(label, exceptIndex) {
+  for (let k = state.meas.length - 1; k >= 0; k--) {
+    const m = state.meas[k];
+    if (k !== exceptIndex && m.corr != null && m[m.end] === label) return m.corr;
+  }
+  return null;
+}
+
+/** Fills an empty correction from the same pile's correction in other measurements. */
+function inheritCorr(i) {
+  const m = state.meas[i];
+  if (m.corr == null) m.corr = knownCorr(m[m.end], i);
+}
+
+/** Next pair of the recommended set (chains, cross ties, diagonals) that isn't measured yet. */
+function nextSuggestedPair() {
+  const key = (a, b) => [a, b].sort().join('|');
+  const have = new Set(state.meas.map(m => key(m.a, m.b)));
+  const next = defaultMeas(state.piles).find(m => !have.has(key(m.a, m.b)));
+  return next ? { a: next.a, b: next.b } : { a: state.piles[0].label, b: state.piles[1].label };
+}
+
+function newMeas(a, b) {
+  return { a, b, value: null, corr: null, end: 'a' };
 }
 
 function renderResiduals(f) {
@@ -559,7 +669,7 @@ function renderResiduals(f) {
     return `<tr>
       <td>${esc(r.a)}–${esc(r.b)}</td>
       <td>${fmt(r.dDesign)}</td>
-      <td>${fmt(r.value)}</td>
+      <td title="${r.corr ? `reading ${fmt(r.reading)} − correction ${fmt(r.corr)}` : ''}">${fmt(r.value)}${r.corr ? '*' : ''}</td>
       <td><span class="badge ${cls}">${sfmt(r.delta)}</span></td>
     </tr>`;
   }).join('');
@@ -945,6 +1055,7 @@ function renderResults() {
   renderAdvice(res);
   renderMoves(res);
   renderPlan(res);
+  saveState();
 }
 
 /* ============================== events ============================== */
@@ -964,8 +1075,13 @@ $('#coords tbody').addEventListener('input', e => {
   const t = e.target;
   if (!t.dataset.i) return;
   const i = +t.dataset.i, f = t.dataset.f;
-  if (f === 'label') state.piles[i].label = t.value;
-  else state.piles[i][f] = parseNum(t.value) ?? state.piles[i][f];
+  if (f === 'label') {
+    // keep measurements and pins attached to the renamed pile
+    const old = state.piles[i].label;
+    for (const m of state.meas) { if (m.a === old) m.a = t.value; if (m.b === old) m.b = t.value; }
+    if (state.pinned.delete(old)) state.pinned.add(t.value);
+    state.piles[i].label = t.value;
+  } else state.piles[i][f] = parseNum(t.value) ?? state.piles[i][f];
   renderMeas();
   renderResults();
 });
@@ -993,17 +1109,29 @@ $('#measRows').addEventListener('input', e => {
   const t = e.target;
   if (!t.dataset.i) return;
   const i = +t.dataset.i, f = t.dataset.f;
-  if (f === 'value') {
-    state.meas[i].value = parseNum(t.value);
+  const m = state.meas[i];
+  if (f === 'value' || f === 'corr') {
+    m[f] = parseNum(t.value);
+    t.closest('.meas-row').querySelector('.meas-corr').classList.toggle('set', !!m.corr);
     updateRowBadge(i);      // keep focus in the input — don't rebuild the DOM
     renderResults();
   } else {
-    state.meas[i][f] = t.value;
-    updateRowBadge(i);
+    m[f] = t.value;         // a pile changed: refresh the end buttons' labels
+    if (f === m.end) inheritCorr(i);
+    renderMeas();
     renderResults();
   }
 });
 $('#measRows').addEventListener('click', e => {
+  const end = e.target.closest('[data-end]');
+  if (end) {
+    const i = +end.dataset.i;
+    state.meas[i].end = end.dataset.end;
+    inheritCorr(i);
+    renderMeas();
+    renderResults();
+    return;
+  }
   const btn = e.target.closest('button.del');
   if (!btn) return;
   state.meas.splice(+btn.dataset.i, 1);
@@ -1012,10 +1140,19 @@ $('#measRows').addEventListener('click', e => {
 });
 $('#addMeas').addEventListener('click', () => {
   if (state.piles.length < 2) return;
-  state.meas.push({ a: state.piles[0].label, b: state.piles[1].label, value: null });
+  const { a, b } = nextSuggestedPair();
+  state.meas.push(newMeas(a, b));
+  inheritCorr(state.meas.length - 1);
   renderMeas();
   renderResults();
+  const inputs = document.querySelectorAll('#measRows [data-f="value"]');
+  inputs[inputs.length - 1]?.focus();
 });
+
+/** Test helpers work on the recommended set when no measurements were added yet. */
+function ensureMeasRows() {
+  if (!state.meas.length) state.meas = defaultMeas(state.piles).map(m => newMeas(m.a, m.b));
+}
 
 // pin toggles live both on the move cards and in the numeric table
 $('#movesCard').addEventListener('click', e => {
@@ -1073,16 +1210,18 @@ $('#edges').addEventListener('change', e => {
 });
 
 $('#fillDesign').addEventListener('click', () => {
+  ensureMeasRows();
   for (const m of state.meas) {
     const a = state.piles.find(p => p.label === m.a);
     const b = state.piles.find(p => p.label === m.b);
-    m.value = a && b ? dist(a, b) : null;
+    m.value = a && b ? dist(a, b) + (m.corr ?? 0) : null; // the tape would read the correction on top
   }
   renderMeas();
   renderResults();
 });
 
 $('#demo').addEventListener('click', () => {
+  ensureMeasRows();
   const truth = state.piles.map(p => {
     const ang = Math.random() * Math.PI * 2;
     const mag = 2 + Math.random() * 22;
@@ -1091,7 +1230,7 @@ $('#demo').addEventListener('click', () => {
   const by = new Map(state.piles.map((p, i) => [p.label, truth[i]]));
   for (const m of state.meas) {
     const a = by.get(m.a), b = by.get(m.b);
-    m.value = a && b ? dist(a, b) : null;
+    m.value = a && b ? dist(a, b) + (m.corr ?? 0) : null;
   }
   renderMeas();
   renderResults();
@@ -1103,6 +1242,23 @@ window.addEventListener('resize', () => {
   resizeTimer = setTimeout(renderResults, 150);
 });
 
+$('#newSession').addEventListener('click', () => {
+  if (!confirm('Start a new session? All piles, measurements and settings saved on this device will be cleared.')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch (_) { /* nothing saved */ }
+  Object.assign(state, defaultState());
+  syncControls();
+  applyPreset(state.preset);
+});
+
 /* ============================== init ============================== */
 renderPresetSelect();
-applyPreset('c20');
+if (loadState()) {
+  syncControls();
+  renderComboBar();
+  renderCoords();
+  renderMeas();
+  renderResults();
+} else {
+  syncControls();
+  applyPreset(state.preset);
+}

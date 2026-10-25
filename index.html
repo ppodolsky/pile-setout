@@ -7,13 +7,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=a37bbc48ad">
+<link rel="stylesheet" href="styles.css?v=86a67f8ede">
 </head>
 <body>
 <header class="top">
-  <div class="wrap">
-    <h1>Pile Field Setout</h1>
-    <p class="sub">Design axes and tape measurements → which piles to move, and where, in the fewest moves</p>
+  <div class="wrap top-row">
+    <div>
+      <h1>Pile Field Setout</h1>
+      <p class="sub">Design axes and tape measurements → which piles to move, and where, in the fewest moves</p>
+    </div>
+    <div class="session">
+      <button class="ghost" id="newSession" type="button">New session</button>
+      <span>Saved automatically on this device</span>
+    </div>
   </div>
 </header>
 
@@ -59,12 +65,14 @@
         <button class="ghost" id="demo" type="button">Demo errors</button>
       </div>
       <p class="hint">Measure between the nails on the stakes (not along the string lines). Enter the reading at the centre of the tape graduation.</p>
+      <p class="hint"><b>Correction:</b> if the tape is hooked on a point behind a pile (a peg, a rebar), every reading from that pile is longer by the same amount. Enter that amount and pick the pile it belongs to — it is subtracted from the reading, and new measurements from the same pile get it automatically.</p>
     </div>
 
     <div class="card">
       <h2>Measurements: design vs actual</h2>
+      <p class="hint" style="margin:0 0 var(--space-3)">* after subtracting the correction.</p>
       <table class="tbl" id="residTable">
-        <thead><tr><th>Pair</th><th>Design</th><th>Measured</th><th>Δ, mm</th></tr></thead>
+        <thead><tr><th>Pair</th><th>Design</th><th>Measured*</th><th>Δ, mm</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -117,6 +125,6 @@
   <p>Corner-casting dimensions per ISO 668 (Annex A): S/P for 10', 20' and 40' = 2787/5853/11985 × 2259 mm. Sources: <a href="https://standards.isodoc.my/iso/ISO%20668-2020%20PDF.pdf" target="_blank" rel="noopener">ISO 668:2020</a>, <a href="https://www.william-cook.co.uk/_media/images/client-uploads/corners.pdf" target="_blank" rel="noopener">William Cook — ISO corner castings</a>. In a container combination, each joint between two containers sits on one shared pile centred on the joint line, carrying the corner castings of both containers. With the default 200 mm flush heads the corner pile centres are 100 mm from the edges, within a few mm of the corner-casting aperture centres (102–103.5 mm from the ends, 89.5 mm from the sides). Intermediate supports (including the middle supports of the 20' field) are an editable starting point: before pouring concrete, check their contact with the longitudinal beams of the actual container (measure the gap with a feeler gauge with the container resting on its corner castings).</p>
 </footer>
 
-<script src="app.js?v=a37bbc48ad"></script>
+<script src="app.js?v=86a67f8ede"></script>
 </body>
 </html>
