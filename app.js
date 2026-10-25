@@ -23,13 +23,17 @@ const INSET_RANGE = [0, 500];
 function buildField(types, head, inset) {
   const outline = [];
   const cols = []; // pile columns along the field: {x, shared}
+  const spans = []; // per container: its end-pile columns and middle-support columns
   const e = inset + head / 2; // pile centre from a container end / long side
   let x0 = 0;
   types.forEach((t, k) => {
     const c = CONTAINERS[t];
     const next = types[k + 1];
+    const xs = k === 0 ? e : x0, xe = next ? x0 + c.L : x0 + c.L - e;
+    const mids = [c.mid, ...(c.mids || [])].filter(Boolean).map(m => x0 + m);
+    spans.push({ xs, xe, mids });
     if (k === 0) cols.push({ x: e });
-    for (const m of [c.mid, ...(c.mids || [])]) if (m) cols.push({ x: x0 + m });
+    for (const m of mids) cols.push({ x: m });
     if (next) cols.push({ x: x0 + c.L, shared: true });
     else cols.push({ x: x0 + c.L - e });
     outline.push({ x0, L: c.L, W: CONTAINER_W, cast: c.cast, pockets: !!c.pockets });
@@ -40,7 +44,35 @@ function buildField(types, head, inset) {
   for (const y of [e, CONTAINER_W - e]) for (const col of cols)
     piles.push({ label: '', x: col.x, y, shared: !!col.shared });
   piles.forEach((p, i) => p.label = 'C' + (i + 1));
+  // a middle support lies on the line between its container's two end piles of the same row
+  const at = (x, y) => piles.find(p => p.x === x && p.y === y);
+  for (const sp of spans) for (const y of [e, CONTAINER_W - e]) for (const xm of sp.mids)
+    at(xm, y).mid = { a: at(sp.xs, y).label, b: at(sp.xe, y).label };
   return { piles, outline };
+}
+
+/**
+ * In 'derived' mode a middle support is not measured: it is set on the string line between its
+ * two corner piles at its design distance, so it adds no unknowns (one container = 4 corners = 5
+ * measurements). Falls back to an ordinary pile if a corner it hangs on was deleted.
+ */
+function isDerived(p) {
+  return state.midMode === 'derived' && !!p.mid &&
+    state.piles.some(q => q.label === p.mid.a) && state.piles.some(q => q.label === p.mid.b);
+}
+
+/** Where a derived pile goes: its corners, the fraction along A→B and the distance from A (design). */
+function derivedPlacement(p) {
+  const A = state.piles.find(q => q.label === p.mid.a), B = state.piles.find(q => q.label === p.mid.b);
+  const L = dist(A, B);
+  const t = L > 0 ? ((p.x - A.x) * (B.x - A.x) + (p.y - A.y) * (B.y - A.y)) / (L * L) : 0;
+  return { A, B, t, d: t * L, L };
+}
+
+function fractionWords(t) {
+  const known = [[0.5, 'half'], [0.25, 'a quarter'], [0.75, 'three quarters'], [1 / 3, 'a third'], [2 / 3, 'two thirds']];
+  const hit = known.find(([v]) => Math.abs(v - t) < 0.002);
+  return hit ? hit[1] : `${fmt(100 * t, 1)}%`;
 }
 
 /** Standard measurement set for a two-row field: chains, cross ties, both diagonals of every bay. */
@@ -90,6 +122,7 @@ function defaultState() {
     meas: [],            // [{a, b, value, corr, end}] — tape reading, hook correction and its end ('a' | 'b')
     head: 200,           // square pile head side, mm
     inset: 0,            // container edge → outer side of the head, mm
+    midMode: 'derived',  // middle supports: 'derived' (set from corners) | 'measured'
     tol: 3,
     exagg: 10,
     showEdges: true,
@@ -107,7 +140,7 @@ const STORAGE_KEY = 'pile-setout/v1';
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      preset: state.preset, containers: state.containers, head: state.head, inset: state.inset,
+      preset: state.preset, containers: state.containers, head: state.head, inset: state.inset, midMode: state.midMode,
       piles: state.piles, meas: state.meas, tol: state.tol, exagg: state.exagg,
       showEdges: state.showEdges, pinned: [...state.pinned],
     }));
@@ -130,7 +163,11 @@ function loadState() {
     containers: d.containers,
     head: num(d.head) ? d.head : 200,
     inset: num(d.inset) ? d.inset : 0,
-    piles: d.piles.map(p => ({ label: p.label, x: p.x, y: p.y, shared: !!p.shared })),
+    piles: d.piles.map(p => ({
+      label: p.label, x: p.x, y: p.y, shared: !!p.shared,
+      ...(p.mid && typeof p.mid.a === 'string' && typeof p.mid.b === 'string' ? { mid: { a: p.mid.a, b: p.mid.b } } : {}),
+    })),
+    midMode: d.midMode === 'measured' ? 'measured' : 'derived',
     meas: d.meas.map(m => ({ a: m.a, b: m.b, value: m.value, corr: m.corr ?? null, end: m.end === 'b' ? 'b' : 'a' })),
     tol: num(d.tol) && d.tol >= 0.5 ? d.tol : 3,
     exagg: num(d.exagg) ? d.exagg : 10,
@@ -152,6 +189,7 @@ function syncControls() {
   $('#exagg').value = state.exagg;
   $('#exaggVal').textContent = state.exagg;
   $('#edges').checked = state.showEdges;
+  renderMidMode();
   for (const id of ['#head', '#inset']) $(id).classList.remove('invalid');
 }
 
@@ -179,6 +217,7 @@ function rebuildField(keepMeas) {
   state.piles = built.piles;
   state.outline = built.outline;
   if (!keep) state.meas = [];
+  renderMidMode();
   renderComboBar();
   renderCoords();
   renderMeas();
@@ -249,6 +288,9 @@ function matrixRank(A, eps) {
 }
 
 /* ============================== least-squares trilateration ============================== */
+/** Assumed precision of one tape reading, mm (1σ) — scales the blunder test. */
+const TAPE_SIGMA = 1;
+
 /**
  * Distance between the two nails: the tape reading minus the correction. The correction is the
  * fixed extra length when the tape is hooked on a point behind one end's pile (it belongs to that end).
@@ -297,12 +339,35 @@ function fit(design, meas) {
     if (step < 1e-7) break;
   }
 
-  const residuals = used.map(m => {
+  // redundancy numbers r = 1 − J_k N⁻¹ J_kᵀ: the share of a reading's own error that shows up in
+  // its residual (0 = unchecked, nothing else constrains it; 1 = fully checked by the others)
+  const jac = used.map(m => {
+    const i = idx.get(m.a), j = idx.get(m.b);
+    const dx = pos[i][0] - pos[j][0], dy = pos[i][1] - pos[j][1];
+    const d0 = Math.hypot(dx, dy) || 1;
+    return [[2 * i, dx / d0], [2 * i + 1, dy / d0], [2 * j, -dx / d0], [2 * j + 1, -dy / d0]];
+  });
+  const N = Array.from({ length: 2 * n }, () => new Array(2 * n).fill(0));
+  for (const row of jac) for (const [r1, c1] of row) for (const [r2, c2] of row) N[r1][r2] += c1 * c2;
+  for (let k = 0; k < 2 * n; k++) N[k][k] += lam;
+  const Ninv = Array.from({ length: 2 * n }, (_, k) => solveLin(N, Array.from({ length: 2 * n }, (_, q) => (q === k ? 1 : 0))));
+  const redundancy = jac.map(row => {
+    let h = 0;
+    for (const [p, cp] of row) for (const [q, cq] of row) h += cp * Ninv[q][p] * cq;
+    return Math.min(1, Math.max(0, 1 - h));
+  });
+
+  const residuals = used.map((m, k) => {
     const i = idx.get(m.a), j = idx.get(m.b);
     const dFit = Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1]);
     const dDesign = dist(design[i], design[j]);
     const len = measLength(m);
-    return { a: m.a, b: m.b, value: len, reading: m.value, corr: m.corr ?? 0, dFit, dDesign, delta: len - dDesign, fitErr: len - dFit };
+    const fitErr = len - dFit, r = redundancy[k];
+    return {
+      a: m.a, b: m.b, value: len, reading: m.value, corr: m.corr ?? 0, dFit, dDesign, delta: len - dDesign, fitErr, r,
+      w: r > 0.02 ? fitErr / (TAPE_SIGMA * Math.sqrt(r)) : 0, // standardized residual (data snooping)
+      blunder: r > 0.02 ? fitErr / r : fitErr,                // estimated error of this reading alone
+    };
   });
   const rms = Math.sqrt(residuals.reduce((s, r) => s + r.fitErr * r.fitErr, 0) / residuals.length);
   return { pos, residuals, rms, used };
@@ -516,7 +581,19 @@ function moveLowerBound(design, fit, r) {
 }
 
 function computeFit() {
-  const design = state.piles;
+  const all = state.piles;
+  const design = all.filter(p => !isDerived(p));
+  const derived = all.filter(isDerived);
+  const res = solve(design);
+  // positions in state.piles order; derived piles have none (they are set from corners, not measured)
+  if (res.fit) {
+    const byLabel = new Map(design.map((p, i) => [p.label, res.fit.pos[i]]));
+    res.fit = { ...res.fit, pos: all.map(p => byLabel.get(p.label) ?? null) };
+  }
+  return { ...res, design, derived };
+}
+
+function solve(design) {
   const f = fit(design, state.meas);
   if (!f) return { status: 'empty' };
   const need = 2 * design.length - 3;
@@ -524,9 +601,18 @@ function computeFit() {
   if (rank < need) {
     return { status: 'under', fit: f, need, rank };
   }
+  // a reading is suspect if its standardized residual is far beyond tape precision and the error it
+  // implies on its own is larger than what matters (2 × tolerance); the old misclosure rules stay
+  const suspect = r => Math.abs(r.w) > 5 && Math.abs(r.blunder) > 2 * state.tol;
   if (f.rms > Math.max(1.5, state.tol) ||
-      f.residuals.some(r => Math.abs(r.fitErr) > Math.max(3 * state.tol, 5))) {
-    return { status: 'contradictory', fit: f };
+      f.residuals.some(r => Math.abs(r.fitErr) > Math.max(3 * state.tol, 5)) ||
+      f.residuals.some(suspect)) {
+    const checked = f.residuals.filter(r => r.r > 0.02);
+    const worst = (checked.length ? checked : f.residuals)
+      .sort((x, y) => Math.abs(y.w) - Math.abs(x.w) || Math.abs(y.fitErr) - Math.abs(x.fitErr))[0];
+    // with few check measurements several readings can explain the misfit equally well
+    const alike = checked.filter(r => Math.abs(Math.abs(r.w) - Math.abs(worst.w)) < 0.05 * Math.abs(worst.w));
+    return { status: 'contradictory', fit: f, worst, alike };
   }
   const search = placementSearch(design, f.pos, state.tol, state.pinned);
   if (!search) return { status: 'empty', fit: f };
@@ -594,8 +680,9 @@ function renderMeas() {
   }
   wrap.innerHTML = state.meas.map((m, i) => {
     const endBtn = end => `<button type="button" class="${m.end === end ? 'on' : ''}" data-i="${i}" data-end="${end}" aria-pressed="${m.end === end}">${esc(m[end])}</button>`;
+    const unused = state.piles.some(p => (p.label === m.a || p.label === m.b) && isDerived(p));
     return `
-    <div class="meas-row">
+    <div class="meas-row ${unused ? 'unused' : ''}" ${unused ? 'title="Not used: middle piles are set from the corners (switch Middle supports to “Measure” to use it)"' : ''}>
       <div class="meas-main">
         <select data-i="${i}" data-f="a" aria-label="Measurement ${i + 1}, first pile">${pairOptions(m.a)}</select>
         <select data-i="${i}" data-f="b" aria-label="Measurement ${i + 1}, second pile">${pairOptions(m.b)}</select>
@@ -668,7 +755,7 @@ let lastAdvice = null;
  * 3. then the rest of the recommended set as check measurements (they catch misread tapes).
  */
 function suggestNext(res) {
-  const design = state.piles;
+  const design = state.piles.filter(p => !isDerived(p));
   if (design.length < 2) return null;
   const labels = new Set(design.map(p => p.label));
   const byPair = new Map(); // pair → row index of an existing row without a reading
@@ -679,9 +766,9 @@ function suggestNext(res) {
   const rowOf = (a, b) => byPair.get(pairKey(a, b));
 
   if (res.status === 'contradictory') {
-    const w = [...res.fit.residuals].sort((x, y) => Math.abs(y.fitErr) - Math.abs(x.fitErr))[0];
+    const w = res.worst;
     const i = state.meas.findIndex(m => pairKey(m.a, m.b) === pairKey(w.a, w.b) && m.value != null);
-    return { kind: 'remeasure', a: w.a, b: w.b, i: i < 0 ? null : i, err: w.fitErr };
+    return { kind: 'remeasure', a: w.a, b: w.b, i: i < 0 ? null : i, err: w.blunder, alike: res.alike.length };
   }
 
   const used = validMeas(design, state.meas);
@@ -755,14 +842,16 @@ function renderNext(res) {
   const bar = s.kind === 'remeasure' ? '' : `<div class="next-bar"><span style="width:${Math.min(100, 100 * s.rank / Math.max(s.need, 1))}%"></span></div>`;
   if (s.kind === 'done') {
     box.innerHTML = `<div class="next-box done"><div class="next-head"><span class="next-title">Next to measure</span>${progress}</div>
-      <div class="next-why">All ${s.recTotal} recommended measurements are in. Follow the move plan; after moving a pile, re-measure its pairs and update the readings.</div></div>`;
+      <div class="next-why">All ${s.recTotal} recommended measurements are in. Follow the move plan; after moving a pile, re-measure its pairs and update the readings.${res.derived?.length ? ' Then set the middle piles from the corrected corners.' : ''}</div></div>`;
     return;
   }
   const pa = state.piles.find(p => p.label === s.a), pb = state.piles.find(p => p.label === s.b);
   const d = pa && pb ? dist(pa, pb) : null;
   const left = s.need - s.rank;
   const why = {
-    remeasure: `This reading doesn't fit the others (off by about <b>${sfmt(s.err)} mm</b>) — probably misread or mistyped. Measure it again before moving any pile.`,
+    remeasure: s.alike > 1
+      ? `The readings don't agree — about <b>${sfmt(s.err)} mm</b> off somewhere. With this few check measurements ${s.alike} readings are equally suspect; start with this one, then the others it is tied to. Add more measurements to pin it down.`
+      : `This reading doesn't fit the others — it looks about <b>${sfmt(s.err)} mm</b> off, probably misread or mistyped. Measure it again before moving any pile.`,
     fix: `Adds new information about the field shape. ${left} more independent measurement${left === 1 ? '' : 's'} needed before the move plan can be computed.`,
     check: `The field is fixed. Optional check measurement — extra readings let the app spot a misread tape (recommended set: ${s.recDone} / ${s.recTotal}).`,
   }[s.kind];
@@ -848,7 +937,11 @@ function renderCorrections(res) {
     return;
   }
   const rows = [...res.align.e].sort((a, b) => b.mag - a.mag);
-  tb.innerHTML = rows.map(c => {
+  const derivedRows = state.piles.filter(isDerived).map(p => {
+    const { A, B, d } = derivedPlacement(p);
+    return `<tr><td>${esc(p.label)}</td><td colspan="4" style="font-family:var(--font-body)">set on ${esc(A.label)} → ${esc(B.label)}, ${fmt(d, 0)} mm from ${esc(A.label)}</td></tr>`;
+  }).join('');
+  tb.innerHTML = derivedRows + rows.map(c => {
     const rowCls = !needsMove(c.mag) ? 'ok' : c.mag <= 3 * state.tol ? 'warn' : 'err';
     return `<tr>
       <td>${esc(c.label)}</td>
@@ -969,11 +1062,19 @@ function renderMoves(res) {
 
   const tiles = piles.map((p, i) => {
     const c = byLabel.get(p.label);
-    const c0 = byLabel.get(p.label);
-    const order = c0 && needsMove(c0.mag) ? res.steps.get(p.label) : 100 + i; // narrow screens list cards in move order
+    const order = isDerived(p) ? 80 + i : c && needsMove(c.mag) ? res.steps.get(p.label) : 100 + i; // narrow screens list cards in move order
     const place = layout
       ? `style="grid-column:${layout.at[i].col};grid-row:${layout.at[i].row};order:${order}"`
       : `style="order:${order}"`;
+    if (isDerived(p)) {
+      const { A, B, t, d } = derivedPlacement(p);
+      return `<div class="mv-tile derived" data-label="${esc(p.label)}" ${place}>
+        <div class="mv-head"><span class="mv-label">${esc(p.label)}</span>${locator(piles, p.label, 'set')}<span class="mv-mag set">set</span></div>
+        ${derivedDiagram(A.label, B.label, t, d)}
+        <div class="mv-dirs"><div>On the string <b>${esc(A.label)} → ${esc(B.label)}</b>, <b>${fmt(d, 0)}</b> mm from ${esc(A.label)} <span class="mv-to">(${fractionWords(t)} of ${esc(A.label)}–${esc(B.label)})</span></div></div>
+        <div class="mv-shared">after ${esc(A.label)} and ${esc(B.label)} are corrected</div>
+      </div>`;
+    }
     if (!c) {
       return `<div class="mv-tile idle" data-label="${esc(p.label)}" ${place}>
         <div class="mv-head"><span class="mv-label">${esc(p.label)}</span>${locator(piles, p.label, 'idle')}</div>
@@ -999,6 +1100,24 @@ function renderMoves(res) {
   host.innerHTML = `<div class="mv-grid ${layout ? 'spatial' : 'flow'}" ${gridStyle}>${tiles.join('')}</div>`;
 }
 
+/** Placement card picture for a middle pile: the string between its corners and the mark on it. */
+function derivedDiagram(a, b, t, d) {
+  const x1 = -40, x2 = 40, px = x1 + t * (x2 - x1);
+  let s = `<svg class="mv-svg" viewBox="-50 -50 100 100" role="img" aria-label="Set ${fmt(d, 0)} mm from ${esc(a)} towards ${esc(b)}">`;
+  s += `<rect x="-50" y="-50" width="100" height="100" fill="#fff"/>`;
+  s += `<line x1="${x1}" y1="8" x2="${x2}" y2="8" stroke="#01696f" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+  for (const [x, l] of [[x1, a], [x2, b]]) {
+    s += `<circle cx="${x}" cy="8" r="3.4" fill="#22252a"/><text x="${x}" y="22" class="mv-leg" text-anchor="middle">${esc(l)}</text>`;
+  }
+  // dimension from A to the mark
+  s += `<path d="M${x1} -10V-2M${px} -10V-2M${x1} -6H${px}" stroke="#6b6f76" stroke-width="0.7" fill="none"/>`;
+  s += `<text x="${(x1 + px) / 2}" y="-9" class="mv-leg" text-anchor="middle">${fmt(d, 0)}</text>`;
+  s += `<path d="M${px - 5} 8H${px + 5}M${px} 3V13" stroke="#01696f" stroke-width="1.6"/>`;
+  s += `<circle cx="${px}" cy="8" r="6" fill="none" stroke="#01696f" stroke-width="1"/>`;
+  s += `<text x="-47.5" y="47.5" class="mv-scale">string line, not to scale</text>`;
+  return s + `</svg>`;
+}
+
 /* ============================== summary & notes ============================== */
 function renderAdvice(res) {
   const sum = $('#summary');
@@ -1017,8 +1136,8 @@ function renderAdvice(res) {
   }
 
   if (res.status === 'contradictory') {
-    const worstRes = [...f.residuals].sort((a, b) => Math.abs(b.fitErr) - Math.abs(a.fitErr))[0];
-    sum.innerHTML = `<div class="advice-box err"><strong>The measurements contradict each other:</strong> model misclosure is <span class="num">${fmt(f.rms, 2)} mm</span> — with consistent measurements it is close to zero. One measurement is probably wrong — check <span class="num">${esc(worstRes.a)}–${esc(worstRes.b)}</span> first (off by <span class="num">${sfmt(worstRes.fitErr)}</span> mm). No move plan is shown until the misclosure is resolved.</div>`;
+    const worstRes = res.worst;
+    sum.innerHTML = `<div class="advice-box err"><strong>The measurements contradict each other:</strong> one reading is probably wrong — check <span class="num">${esc(worstRes.a)}–${esc(worstRes.b)}</span> first (it looks about <span class="num">${sfmt(worstRes.blunder)}</span> mm off)${res.alike.length > 1 ? `; ${res.alike.length} readings are equally suspect with this few checks` : ''}. No move plan is shown until the readings agree.</div>`;
     return;
   }
 
@@ -1038,7 +1157,7 @@ function renderAdvice(res) {
   if (nBad === 0) {
     sum.innerHTML = `<div class="advice-box ok"><strong>Everything is within tolerance.</strong> Largest pile offset is <span class="num">${fmt(maxC)} mm</span> at a tolerance of <span class="num">${fmt(tol)} mm</span>. No moves needed.</div>`;
   } else {
-    sum.innerHTML = `<div class="advice-box"><strong>${nBad} ${plural(nBad, 'move', 'moves')}</strong> out of ${state.piles.length} piles. Move each orange pile once, onto the cross, in the numbered order (largest first). Measurement RMS: <span class="num">${fmt(f.rms, 2)} mm</span>.</div>`;
+    sum.innerHTML = `<div class="advice-box"><strong>${nBad} ${plural(nBad, 'move', 'moves')}</strong> out of ${res.design.length} measured piles. Move each orange pile once, onto the cross, in the numbered order (largest first).${res.derived.length ? ` Then set the ${res.derived.length} middle pile${res.derived.length === 1 ? '' : 's'} on the string between ${res.derived.length === 1 ? 'its' : 'their'} corrected corners.` : ''} Measurement RMS: <span class="num">${fmt(f.rms, 2)} mm</span>.</div>`;
     const first = moves[0];
     const affected = f.used.filter(m => m.a === first.label || m.b === first.label).map(m => `${m.a}–${m.b}`);
     if (affected.length) box.insertAdjacentHTML('beforeend',
@@ -1155,9 +1274,21 @@ function renderPlan(res) {
   const allowArrows = res && res.status === 'ok';
   for (let i = 0; i < state.piles.length; i++) {
     const p = state.piles[i];
-    const fx = pos[i][0], fy = pos[i][1];
     const [dx, dy] = mapD(p.x, p.y);
     s += `<g class="pile" data-label="${esc(p.label)}">`;
+    if (isDerived(p)) {
+      // middle pile: set on the string between its corners — no measured position, no arrow
+      const { A, B } = derivedPlacement(p);
+      const [ax, ay] = mapD(A.x, A.y), [bx, by] = mapD(B.x, B.y);
+      const hd = state.head;
+      s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#01696f" stroke-width="${5 * z}" stroke-dasharray="${30 * z} ${20 * z}" opacity="0.7"><title>String ${esc(A.label)} → ${esc(B.label)}</title></line>`;
+      s += `<rect ${designFrame} x="${p.x - hd / 2}" y="${p.y - hd / 2}" width="${hd}" height="${hd}" fill="none" stroke="#01696f" stroke-width="5" stroke-dasharray="20 12" opacity="0.8"><title>${esc(p.label)}: set from ${esc(A.label)} and ${esc(B.label)}</title></rect>`;
+      s += `<text x="${dx}" y="${dy - 120 * z}" font-size="${105 * z}" fill="#01696f" font-weight="600" text-anchor="middle">${esc(p.label)}</text>`;
+      s += `<path d="M${dx - 45 * z} ${dy} H${dx + 45 * z} M${dx} ${dy - 45 * z} V${dy + 45 * z}" stroke="#01696f" stroke-width="${8 * z}"/>`;
+      s += `</g>`;
+      continue;
+    }
+    const fx = pos[i] ? pos[i][0] : dx, fy = pos[i] ? pos[i][1] : dy;
     const hd = state.head;
     const capTitle = p.shared
       ? `Shared pile head ${fmt(hd)}×${fmt(hd)} — carries the corner castings of both containers, ${esc(p.label)}`
@@ -1228,6 +1359,7 @@ $('#coords tbody').addEventListener('input', e => {
     const old = state.piles[i].label;
     for (const m of state.meas) { if (m.a === old) m.a = t.value; if (m.b === old) m.b = t.value; }
     if (state.pinned.delete(old)) state.pinned.add(t.value);
+    for (const p of state.piles) if (p.mid) { if (p.mid.a === old) p.mid.a = t.value; if (p.mid.b === old) p.mid.b = t.value; }
     state.piles[i].label = t.value;
   } else state.piles[i][f] = parseNum(t.value) ?? state.piles[i][f];
   renderMeas();
@@ -1396,6 +1528,28 @@ $('#newSession').addEventListener('click', () => {
   Object.assign(state, defaultState());
   syncControls();
   applyPreset(state.preset);
+});
+
+function renderMidMode() {
+  const has = state.piles.some(p => p.mid);
+  $('#midModeRow').hidden = !has;
+  for (const b of document.querySelectorAll('#midMode [data-mode]')) {
+    const on = b.dataset.mode === state.midMode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+  }
+  const corners = state.piles.filter(p => !p.mid).length, all = state.piles.length;
+  $('#midModeHint').textContent = state.midMode === 'derived'
+    ? `Only the ${corners} corner piles are measured and corrected (${2 * corners - 3} measurements minimum). Each middle pile is then set on the string line between its corrected corners at its design distance.`
+    : `Every pile is measured and corrected on its own (${2 * all - 3} measurements minimum) — this also catches a middle stake that is off the string line.`;
+}
+$('#midMode').addEventListener('click', e => {
+  const b = e.target.closest('[data-mode]');
+  if (!b || b.dataset.mode === state.midMode) return;
+  state.midMode = b.dataset.mode;
+  renderMidMode();
+  renderMeas();
+  renderResults();
 });
 
 /* ============================== init ============================== */

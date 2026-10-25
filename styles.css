@@ -125,6 +125,15 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .toolbar .field.inline span { font-size: var(--text-xs); color: var(--color-text-muted); }
 .toolbar input[type="number"] { width: 84px; }
 
+/* middle supports mode */
+.mid-mode { margin: var(--space-3) 0 var(--space-1); }
+.seg.seg-lg { align-self: flex-start; }
+.seg.seg-lg button { padding: var(--space-1) var(--space-3); font-family: var(--font-body); font-size: var(--text-sm); }
+.meas-row.unused { opacity: 0.45; }
+.mv-tile.derived { box-shadow: inset 0 3px 0 var(--color-primary); border-style: dashed; }
+.mv-mag.set { color: var(--color-primary); }
+.mv-loc .set { fill: var(--color-primary); }
+
 /* what to measure next */
 .next-box { border: 1px solid rgba(1,105,111,0.35); background: rgba(1,105,111,0.05); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
 .next-box.remeasure { border-color: rgba(179,38,30,0.45); background: rgba(179,38,30,0.05); }
