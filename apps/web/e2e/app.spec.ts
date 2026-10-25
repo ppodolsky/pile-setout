@@ -129,3 +129,10 @@ test('migrates a session saved by the first version', async ({ page }) => {
   await expect(page.locator('[data-reading]').first()).toHaveValue('5880');
   await expect(page.getByText('= 5,858')).toBeVisible();
 });
+
+test('reopens in the mode used last', async ({ page }) => {
+  await fresh(page, '/piles/fieldwork');
+  await expect(page.getByText('Next to measure')).toBeVisible();
+  await page.goto('./');
+  await expect(page).toHaveURL(/#\/piles\/fieldwork$/);
+});
