@@ -24,8 +24,7 @@ export interface ContainerSpec {
 
 export type ContainerType = keyof typeof CONTAINERS;
 export const CONTAINER_TYPES = Object.keys(CONTAINERS) as ContainerType[];
-export const isContainerType = (v: unknown): v is ContainerType =>
-  typeof v === 'string' && v in CONTAINERS;
+export const isContainerType = (v: unknown): v is ContainerType => typeof v === 'string' && v in CONTAINERS;
 
 /** External width of all ISO containers, mm. */
 export const CONTAINER_WIDTH = 2438;

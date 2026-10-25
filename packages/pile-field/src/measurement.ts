@@ -1,10 +1,10 @@
 import type { Pair } from '@buildkit/survey';
-import type { Pile } from './field';
+import type { Pile } from './design';
 
 /**
- * One tape measurement between two piles. The tape is often hooked on a point behind one of
- * the piles (a peg, a rebar), which adds a fixed length to every reading from that pile:
- * that is the `correction`, and `correctionEnd` says which end it belongs to.
+ * One tape measurement between two piles. The tape is often hooked on a point behind a pile
+ * (a peg, a rebar), which adds a fixed length to every reading from that pile — the correction
+ * at that end. Either end can have one; both default to none (0).
  */
 export interface Measurement {
   readonly id: string;
@@ -12,18 +12,26 @@ export interface Measurement {
   readonly b: string;
   /** Tape reading, mm; null while not measured yet. */
   readonly reading: number | null;
-  /** Fixed extra length to subtract, mm. */
-  readonly correction: number | null;
-  readonly correctionEnd: 'a' | 'b';
+  /** Fixed extra length at end `a`, mm (null = none). */
+  readonly correctionA: number | null;
+  /** Fixed extra length at end `b`, mm (null = none). */
+  readonly correctionB: number | null;
 }
 
-/** Distance between the two nails: reading minus correction. */
+/** Distance between the two nails: reading minus both end corrections. */
 export function correctedLength(m: Measurement): number | null {
-  return m.reading == null ? null : m.reading - (m.correction ?? 0);
+  return m.reading == null ? null : m.reading - (m.correctionA ?? 0) - (m.correctionB ?? 0);
 }
 
-/** The pile the correction belongs to. */
-export const correctionPile = (m: Measurement): string => (m.correctionEnd === 'a' ? m.a : m.b);
+/** A new, unread measurement. */
+export const emptyMeasurement = (id: string, a: string, b: string): Measurement => ({
+  id,
+  a,
+  b,
+  reading: null,
+  correctionA: null,
+  correctionB: null,
+});
 
 /**
  * Recommended measuring order for a two-row field: chains along the rows, full row lengths and

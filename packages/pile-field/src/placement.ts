@@ -190,9 +190,7 @@ export function moveLowerBound(
 ): number | null {
   const r = tolerance + SLACK;
   const idx = new Map(ids.map((id, i) => [id, i]));
-  const edges = pairs
-    .filter((p) => Math.abs(p.actual - p.design) > 2 * r)
-    .map((p) => [idx.get(p.a)!, idx.get(p.b)!] as const);
+  const edges = pairs.filter((p) => Math.abs(p.actual - p.design) > 2 * r).map((p) => [idx.get(p.a)!, idx.get(p.b)!] as const);
   const n = ids.length;
   if (!edges.length) return 0;
   if (n > 20) return null;

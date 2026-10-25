@@ -1,6 +1,6 @@
 import { distance, type Vec2 } from '@buildkit/geometry';
 import type { Pair } from '@buildkit/survey';
-import type { Pile } from './field';
+import type { Pile } from './design';
 
 /** Deterministic PRNG (Park–Miller) for demos and tests. */
 export function rng(seed = 1): () => number {
@@ -19,7 +19,10 @@ export function scatter(piles: readonly Pile[], random: () => number, min = 2, m
   );
 }
 
-/** Exact tape readings between actual positions (plus each pair's hook correction, if any). */
-export function readings(actual: ReadonlyMap<string, Vec2>, pairs: readonly (Pair & { correction?: number | null })[]): number[] {
-  return pairs.map((p) => distance(actual.get(p.a)!, actual.get(p.b)!) + (p.correction ?? 0));
+/** Exact tape readings between actual positions (plus each end's hook correction, if any). */
+export function readings(
+  actual: ReadonlyMap<string, Vec2>,
+  pairs: readonly (Pair & { correctionA?: number | null; correctionB?: number | null })[],
+): number[] {
+  return pairs.map((p) => distance(actual.get(p.a)!, actual.get(p.b)!) + (p.correctionA ?? 0) + (p.correctionB ?? 0));
 }

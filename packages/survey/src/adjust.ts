@@ -43,10 +43,7 @@ export interface AdjustOptions {
 const GAUGE = 1e-3;
 
 /** Observations that can be used: both ends known, distinct, positive length. */
-export function usableObservations(
-  stations: readonly Station[],
-  obs: readonly DistanceObservation[],
-): DistanceObservation[] {
+export function usableObservations(stations: readonly Station[], obs: readonly DistanceObservation[]): DistanceObservation[] {
   const ids = new Set(stations.map((s) => s.id));
   return obs.filter((o) => ids.has(o.a) && ids.has(o.b) && o.a !== o.b && o.length > 0);
 }
@@ -175,11 +172,7 @@ export function findBlunders(adj: Adjustment, opts: BlunderOptions): BlunderRepo
   if (!suspect) return { suspect: false, alike: [] };
   const checked = res.filter((r) => r.redundancy > 0.02);
   const pool = checked.length ? checked : [...res];
-  const worst = [...pool].sort(
-    (x, y) => Math.abs(y.w) - Math.abs(x.w) || Math.abs(y.misfit) - Math.abs(x.misfit),
-  )[0];
-  const alike = worst
-    ? checked.filter((r) => Math.abs(Math.abs(r.w) - Math.abs(worst.w)) < 0.05 * Math.abs(worst.w))
-    : [];
+  const worst = [...pool].sort((x, y) => Math.abs(y.w) - Math.abs(x.w) || Math.abs(y.misfit) - Math.abs(x.misfit))[0];
+  const alike = worst ? checked.filter((r) => Math.abs(Math.abs(r.w) - Math.abs(worst.w)) < 0.05 * Math.abs(worst.w)) : [];
   return { suspect: true, ...(worst ? { worst } : {}), alike };
 }

@@ -23,8 +23,7 @@ const design: Station[] = [
 ];
 const truth = new Map(design.map((s, i) => [s.id, { x: s.x + 7 * Math.sin(i), y: s.y + 5 * Math.cos(2 * i) }]));
 const allPairs: Pair[] = [];
-for (let i = 0; i < design.length; i++)
-  for (let j = i + 1; j < design.length; j++) allPairs.push({ a: design[i]!.id, b: design[j]!.id });
+for (let i = 0; i < design.length; i++) for (let j = i + 1; j < design.length; j++) allPairs.push({ a: design[i]!.id, b: design[j]!.id });
 const observe = (pairs: Pair[], bias: Record<string, number> = {}): DistanceObservation[] =>
   pairs.map((p) => ({
     ...p,

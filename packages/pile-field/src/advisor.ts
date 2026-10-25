@@ -48,11 +48,13 @@ export function suggestNext(plan: Plan, measurements: readonly Measurement[]): S
   return { kind: s.kind, a: s.pair.a, b: s.pair.b, ...(row ? { measurementId: row.id } : {}), progress: s.progress };
 }
 
-/** The last correction used for a pile (as the hooked end) in another measurement, if any. */
+/** The last correction used at a pile's end in another measurement, if any (to offer it again). */
 export function knownCorrection(measurements: readonly Measurement[], pileId: string, exceptId?: string): number | null {
   for (let k = measurements.length - 1; k >= 0; k--) {
     const m = measurements[k]!;
-    if (m.id !== exceptId && m.correction != null && (m.correctionEnd === 'a' ? m.a : m.b) === pileId) return m.correction;
+    if (m.id === exceptId) continue;
+    if (m.a === pileId && m.correctionA != null) return m.correctionA;
+    if (m.b === pileId && m.correctionB != null) return m.correctionB;
   }
   return null;
 }

@@ -57,8 +57,7 @@ export function nextObservation({ stations, observed, pending, recommended }: Ad
       const k = pairKey(c.a, c.b);
       if (c.a === c.b || done.has(k) || seen.has(k)) continue;
       seen.add(k);
-      if (rigidityRank(stations, [...observed, c]) > rank)
-        return { kind: 'fix', pair: { a: c.a, b: c.b }, progress };
+      if (rigidityRank(stations, [...observed, c]) > rank) return { kind: 'fix', pair: { a: c.a, b: c.b }, progress };
     }
   }
   const next = recommended.find((p) => !done.has(pairKey(p.a, p.b)));

@@ -1,5 +1,7 @@
 export * from './containers';
+export * from './design';
 export * from './field';
+export * from './setout';
 export * from './measurement';
 export * from './placement';
 export * from './plan';

@@ -1,0 +1,141 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-sans/latin-700.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens. UI components use the shadcn names; drawings use the --draw-* tokens so every
+ * plan, card diagram and icon follows the theme (light / dark) without code changes.
+ */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.975 0.004 85);
+  --foreground: oklch(0.22 0.01 260);
+  --card: oklch(0.993 0.002 85);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.51 0.09 186);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.94 0.006 85);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.945 0.005 85);
+  --muted-foreground: oklch(0.5 0.012 260);
+  --accent: oklch(0.93 0.02 186);
+  --accent-foreground: oklch(0.3 0.06 186);
+  --destructive: oklch(0.55 0.2 27);
+  --border: oklch(0.89 0.006 85);
+  --input: oklch(0.86 0.006 85);
+  --ring: oklch(0.51 0.09 186);
+
+  --ok: oklch(0.52 0.13 150);
+  --warn: oklch(0.6 0.13 75);
+  --err: oklch(0.55 0.2 27);
+  --move: oklch(0.62 0.18 45);
+
+  --draw-bg: oklch(0.985 0.003 85);
+  --draw-grid: oklch(0.9 0.005 85);
+  --draw-ink: oklch(0.25 0.01 260);
+  --draw-muted: oklch(0.62 0.01 260);
+  --draw-container: oklch(0.95 0.008 160);
+  --draw-container-stroke: oklch(0.45 0.02 250);
+  --draw-head: oklch(0.6 0.01 260);
+  --draw-param: var(--primary);
+  --draw-move: var(--move);
+  --draw-select: oklch(0.6 0.2 260);
+}
+
+.dark {
+  --background: oklch(0.17 0.008 250);
+  --foreground: oklch(0.93 0.005 85);
+  --card: oklch(0.21 0.009 250);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.23 0.009 250);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.72 0.11 186);
+  --primary-foreground: oklch(0.18 0.02 186);
+  --secondary: oklch(0.27 0.01 250);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.26 0.01 250);
+  --muted-foreground: oklch(0.68 0.012 250);
+  --accent: oklch(0.3 0.04 186);
+  --accent-foreground: oklch(0.9 0.04 186);
+  --destructive: oklch(0.65 0.19 25);
+  --border: oklch(0.3 0.01 250);
+  --input: oklch(0.34 0.01 250);
+  --ring: oklch(0.72 0.11 186);
+
+  --ok: oklch(0.72 0.15 150);
+  --warn: oklch(0.78 0.13 80);
+  --err: oklch(0.68 0.19 25);
+  --move: oklch(0.72 0.17 50);
+
+  --draw-bg: oklch(0.19 0.008 250);
+  --draw-grid: oklch(0.26 0.008 250);
+  --draw-ink: oklch(0.92 0.005 85);
+  --draw-muted: oklch(0.6 0.01 250);
+  --draw-container: oklch(0.24 0.012 200);
+  --draw-container-stroke: oklch(0.62 0.02 250);
+  --draw-head: oklch(0.6 0.01 250);
+  --draw-select: oklch(0.72 0.16 260);
+}
+
+@theme inline {
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+  --color-move: var(--move);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'tnum';
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
