@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Constraint } from '@buildkit/sketch';
+import { dragPoint, solveDocument, type CadConstraint } from '@buildkit/cad';
 import {
   CASTING,
   computePlan,
@@ -10,8 +10,8 @@ import {
   recommendedPairs,
   rng,
   scatter,
+  pilesOf,
   setoutPlan,
-  solveDesign,
   suggestNext,
   type ContainerType,
   type Measurement,
@@ -20,8 +20,8 @@ import {
 } from './index';
 
 const build = (containers: ContainerType[], head = 200, inset = 0) => {
-  const design = generateDesign({ containers, head, inset });
-  return { ...design, ...solveDesign(design) };
+  const { doc, status } = solveDocument(generateDesign({ containers, head, inset }));
+  return { doc, status, piles: pilesOf(doc), constraints: doc.constraints };
 };
 const field20 = (head = 200, inset = 0) => build(['20'], head, inset);
 let seq = 0;
@@ -74,10 +74,10 @@ describe('generateDesign', () => {
 
   it('is a fully constrained sketch', () => {
     for (const c of [['10'], ['20'], ['40'], ['10', '20', '40']] as ContainerType[][]) {
-      const { status, piles } = build(c);
+      const { status, doc } = build(c);
       expect(status.conflicts.size).toBe(0);
       expect(status.dof).toBe(0);
-      expect(status.determined.size).toBe(piles.length);
+      expect(status.determined.size).toBe(doc.points.length);
     }
   });
 
@@ -109,12 +109,23 @@ describe('generateDesign', () => {
   it('follows its constraints when a dimension changes', () => {
     const d = generateDesign({ containers: ['20'], head: 200, inset: 0 });
     const dx = d.constraints.find((c) => c.kind === 'dx')!;
-    const edited = { ...d, constraints: d.constraints.map((c) => (c.id === dx.id ? { ...c, d: 6000 } : c)) as Constraint[] };
-    const { piles } = solveDesign(edited);
+    const edited = { ...d, constraints: d.constraints.map((c) => (c.id === dx.id ? { ...c, d: 6000 } : c)) as CadConstraint[] };
+    const piles = pilesOf(solveDocument(edited).doc);
     const at = (l: string) => piles.find((p) => p.label === l)!;
     expect(at('C3').x).toBeCloseTo(6100, 6);
     expect(at('C6').x).toBeCloseTo(6100, 6); // vertical above C3
     expect(at('C2').x).toBeCloseTo(3100, 6); // stays the midpoint
+  });
+
+  it('dragging a corner pile drives its dimension; the rest of the plan follows', () => {
+    const d = generateDesign({ containers: ['20'], head: 200, inset: 0 });
+    const c3 = pilesOf(d).find((p) => p.label === 'C3')!;
+    const piles = pilesOf(dragPoint(d, c3.point, { x: 6300, y: 180 }));
+    const at = (l: string) => piles.find((p) => p.label === l)!;
+    expect(at('C3').x).toBeCloseTo(6300, 1);
+    expect(at('C3').y).toBeCloseTo(100, 6); // stays on the row axis
+    expect(at('C6').x).toBeCloseTo(at('C3').x, 6);
+    expect(at('C2').x).toBeCloseTo((100 + at('C3').x) / 2, 6);
   });
 });
 
@@ -142,11 +153,11 @@ describe('set-out of derived piles', () => {
     const { piles, constraints } = field20();
     const derive = new Set(['C1', 'C2', 'C5']);
     const ps = piles.map((p) => ({ ...p, setout: derive.has(p.label) ? 'derive' : 'measure' }) as Pile);
-    const id = (l: string) => ps.find((p) => p.label === l)!.id;
-    const cs: Constraint[] = [
-      ...constraints.filter((c) => !('p' in c && c.p === id('C1')) || c.kind === 'ratio'),
-      { id: 'x1', kind: 'distance', a: id('C4'), b: id('C1'), d: 2238 },
-      { id: 'x2', kind: 'angle', a: id('C4'), b: id('C1'), angle: -90, ref: null },
+    const pt = (l: string) => ps.find((p) => p.label === l)!.point;
+    const cs: CadConstraint[] = [
+      ...constraints,
+      { id: 'x1', kind: 'distance', a: pt('C4'), b: pt('C1'), d: 2238 },
+      { id: 'x2', kind: 'angle', a: pt('C4'), b: pt('C1'), angle: -90, ref: null },
     ];
     const steps = setoutPlan(
       ps.filter((p) => p.setout === 'derive'),
@@ -154,6 +165,7 @@ describe('set-out of derived piles', () => {
       cs,
     );
     const placed = new Set(ps.filter((p) => p.setout === 'measure').map((p) => p.id));
+    expect(steps.every((s) => s.instruction)).toBe(true);
     for (const s of steps) {
       expect(s.instruction).not.toBeNull();
       const refs = s.instruction!.kind === 'string' ? [s.instruction!.from, s.instruction!.to] : [s.instruction!.a, s.instruction!.b];

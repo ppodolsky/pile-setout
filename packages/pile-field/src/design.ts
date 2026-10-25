@@ -1,4 +1,4 @@
-import { solveSketch, type Constraint } from '@buildkit/sketch';
+import type { CadDocument, Element } from '@buildkit/cad';
 import type { Vec2 } from '@buildkit/geometry';
 
 /**
@@ -8,39 +8,33 @@ import type { Vec2 } from '@buildkit/geometry';
  */
 export type SetoutRole = 'measure' | 'derive';
 
-/**
- * A pile of the design: a point of a constraint sketch. `x, y` are its current (solved) position
- * in mm — X along the containers, Y across, Y up. `id` is stable; `label` may be renamed.
- */
-export interface Pile extends Vec2 {
-  readonly id: string;
-  readonly label: string;
+/** A pile: a CAD element on a point, with its physical properties. */
+export interface PileElement extends Element {
+  readonly type: 'pile';
+  /** Square head side, mm. */
+  readonly head: number;
+  /** Shaft diameter, mm. */
+  readonly diameter?: number;
+  /** Depth below ground, mm. */
+  readonly depth?: number;
   readonly setout: SetoutRole;
   /** One pile carrying the corner castings of two neighbouring containers. */
   readonly shared?: boolean;
 }
 
-/** A pile plan: piles plus the geometric constraints between them (CAD sketch). */
-export interface PileDesign {
-  readonly piles: readonly Pile[];
-  readonly constraints: readonly Constraint[];
-}
+/** A pile plan: the generic CAD document whose elements are piles. */
+export type PileDesign = CadDocument<PileElement>;
 
-export interface DesignStatus {
-  /** Constraints that cannot all hold together (shown in red). */
-  readonly conflicts: ReadonlySet<string>;
-  /** Piles fully determined by the constraints. */
-  readonly determined: ReadonlySet<string>;
-  /** Free degrees of freedom left in the sketch. */
-  readonly dof: number;
-}
+/** A pile with its current position — what field work and drawings use. */
+export interface Pile extends PileElement, Vec2 {}
 
-/** Re-solves a design from its current positions; returns piles at the solved positions. */
-export function solveDesign(design: PileDesign, drag?: { id: string; to: Vec2 }): { piles: Pile[]; status: DesignStatus } {
-  const sol = solveSketch(design.piles, design.constraints, drag ? { drag } : {});
-  const piles = design.piles.map((p) => {
-    const q = sol.positions.get(p.id)!;
-    return q.x === p.x && q.y === p.y ? p : { ...p, x: q.x, y: q.y };
+export const isPile = (e: Element): e is PileElement => e.type === 'pile';
+
+/** All piles of a design with their positions (from their points). */
+export function pilesOf(doc: PileDesign): Pile[] {
+  const at = new Map(doc.points.map((p) => [p.id, p]));
+  return doc.elements.filter(isPile).flatMap((e) => {
+    const p = at.get(e.point);
+    return p ? [{ ...e, x: p.x, y: p.y }] : [];
   });
-  return { piles, status: { conflicts: new Set(sol.conflicts), determined: sol.determined, dof: sol.dof } };
 }

@@ -1,5 +1,57 @@
-import { isContainerType, projectT, type Constraint, type ContainerType, type Measurement, type Pile } from './deps';
+import { isContainerType, projectT, type CadConstraint, type ContainerType, type Measurement, type PileDesign } from './deps';
 import { designFromTemplate, newProject, type DesignState, type ProjectData } from './project';
+
+/** Version-3 pile (piles were points themselves). */
+interface V3Pile {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  setout: 'measure' | 'derive';
+  shared?: boolean;
+}
+
+/** Version 3 → 4: each pile becomes a point plus a pile element on it (same ids). */
+export function upgradeDesign(piles: readonly V3Pile[], constraints: readonly CadConstraint[], head: number): PileDesign {
+  return {
+    points: piles.map((p) => ({ id: p.id, x: p.x, y: p.y })),
+    lines: [],
+    constraints: [...constraints],
+    elements: piles.map((p) => ({
+      id: p.id,
+      type: 'pile',
+      point: p.id,
+      label: p.label,
+      head,
+      setout: p.setout,
+      ...(p.shared ? { shared: true } : {}),
+    })),
+  };
+}
+
+/** Persisted version 3 → current. */
+export function migrateV3(state: Raw): ProjectData {
+  const base = newProject();
+  const d = (state.design ?? {}) as Raw;
+  const template = (d.template as DesignState['template']) ?? base.design.template;
+  if (!d.edited)
+    return {
+      ...base,
+      ...(state as object),
+      design: designFromTemplate(template),
+      view: { ...base.view, ...((state.view as object) ?? {}) },
+    } as ProjectData;
+  return {
+    ...base,
+    ...(state as object),
+    design: {
+      template,
+      doc: upgradeDesign((d.piles as V3Pile[]) ?? [], (d.constraints as CadConstraint[]) ?? [], template.head),
+      edited: true,
+    },
+    view: { ...base.view, ...((state.view as object) ?? {}) },
+  } as ProjectData;
+}
 
 /** Key used by the first, single-file version of the app. */
 export const V1_KEY = 'pile-setout/v1';
@@ -33,7 +85,7 @@ export function migrateV1(raw: string | null): ProjectData | null {
   };
 
   const idOf = new Map(piles.map((p, i) => [p.label as string, `p${i + 1}`]));
-  const ps: Pile[] = piles.map((p, i) => ({
+  const ps: V3Pile[] = piles.map((p, i) => ({
     id: `p${i + 1}`,
     label: p.label as string,
     x: p.x as number,
@@ -41,7 +93,7 @@ export function migrateV1(raw: string | null): ProjectData | null {
     setout: p.mid ? 'derive' : 'measure',
     ...(p.shared ? { shared: true } : {}),
   }));
-  const constraints: Constraint[] = [];
+  const constraints: CadConstraint[] = [];
   piles.forEach((p, i) => {
     const mid = p.mid as { a?: unknown; b?: unknown } | undefined;
     const A = mid && piles.find((q) => q.label === mid.a);
@@ -60,12 +112,11 @@ export function migrateV1(raw: string | null): ProjectData | null {
   });
   // a layout that is exactly the template's gets the template's (nicer) constraints
   const generated = designFromTemplate(template);
-  const same =
-    generated.piles.length === ps.length &&
-    generated.piles.every((g, i) => Math.abs(g.x - ps[i]!.x) < 0.01 && Math.abs(g.y - ps[i]!.y) < 0.01);
+  const gp = generated.doc.elements.map((e) => generated.doc.points.find((p) => p.id === e.point)!);
+  const same = gp.length === ps.length && gp.every((g, i) => Math.abs(g.x - ps[i]!.x) < 0.01 && Math.abs(g.y - ps[i]!.y) < 0.01);
   const design: DesignState = same
-    ? { ...generated, piles: generated.piles.map((g, i) => ({ ...g, label: ps[i]!.label })) }
-    : { template, piles: ps, constraints, edited: true };
+    ? { ...generated, doc: { ...generated.doc, elements: generated.doc.elements.map((e, i) => ({ ...e, label: ps[i]!.label })) } }
+    : { template, doc: upgradeDesign(ps, constraints, template.head), edited: true };
 
   const measurements: Measurement[] = (Array.isArray(d.meas) ? (d.meas as Raw[]) : [])
     .filter((m) => idOf.has(m.a as string) && idOf.has(m.b as string))
@@ -103,7 +154,12 @@ export function migrateV2(state: Raw): ProjectData {
   const specs = (Array.isArray(design.piles) ? design.piles : []) as Raw[];
   const template = (design.template as DesignState['template']) ?? base.design.template;
   if (!design.edited) {
-    return { ...base, ...(state as object), design: designFromTemplate(template) } as ProjectData;
+    return {
+      ...base,
+      ...(state as object),
+      design: designFromTemplate(template),
+      view: { ...base.view, ...((state.view as object) ?? {}) },
+    } as ProjectData;
   }
   // evaluate positions in dependency order (as version 2 did)
   const pos = new Map<string, { x: number; y: number }>();
@@ -132,7 +188,7 @@ export function migrateV2(state: Raw): ProjectData {
     if (p) pos.set(id, p);
     return p;
   };
-  const piles: Pile[] = specs.flatMap((s) => {
+  const piles: V3Pile[] = specs.flatMap((s) => {
     const p = visit(s.id as string);
     return p
       ? [
@@ -142,11 +198,11 @@ export function migrateV2(state: Raw): ProjectData {
             ...p,
             setout: (s.def as Raw).kind === 'fixed' ? 'measure' : 'derive',
             ...(s.shared ? { shared: true } : {}),
-          } as Pile,
+          } as V3Pile,
         ]
       : [];
   });
-  const constraints: Constraint[] = [];
+  const constraints: CadConstraint[] = [];
   let k = 0;
   for (const s of specs) {
     const def = s.def as Raw;
@@ -169,7 +225,7 @@ export function migrateV2(state: Raw): ProjectData {
   }
   const fw = (state.fieldwork ?? base.fieldwork) as ProjectData['fieldwork'];
   return {
-    design: { template, piles, constraints, edited: true },
+    design: { template, doc: upgradeDesign(piles, constraints, template.head), edited: true },
     fieldwork: fw,
     view: { ...base.view, ...((state.view as object) ?? {}) },
   };

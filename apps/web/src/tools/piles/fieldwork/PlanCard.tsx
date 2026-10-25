@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { fmt } from '@/lib/format';
-import { SetoutLines } from '../drawing/constraints';
+import { SetoutLines } from '../drawing/setout';
 import { Containers, PileHead, PileMark } from '../drawing/layers';
 import { useFieldwork, useOutlines } from '../model/derived';
-import { useEditor } from '../model/editor';
+import { useCadEditor } from '@/cad';
 import { useProject } from '../model/store';
 
 /** The field as measured: actual stakes, arrows to their design positions, move order. */
@@ -20,7 +20,7 @@ function PlanLayers() {
   const head = useProject((s) => s.design.template.head);
   const { exaggeration, showLines } = useProject((s) => s.view);
   const tol = useProject((s) => s.fieldwork.tolerance);
-  const hovered = useEditor((s) => s.hovered);
+  const hovered = useCadEditor((s) => s.hovered);
   const frame = plan.status === 'ok' ? plan.placement.transform : undefined;
   const map = (p: Vec2) => (frame ? applyRigid(frame, p) : p);
   const derived = new Set(plan.derived.map((p) => p.id));

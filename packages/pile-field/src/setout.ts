@@ -38,7 +38,8 @@ export interface SetoutStep {
  * placed piles whose tapes cross at a clear angle. Never from a pile that isn't placed yet.
  */
 export function setoutPlan(derived: readonly Pile[], measured: readonly Pile[], constraints: readonly Constraint[]): SetoutStep[] {
-  const placed = new Map(measured.map((p) => [p.id, p]));
+  // constraints tie points; piles stand on points
+  const placed = new Map(measured.map((p) => [p.point, p]));
   const waiting = [...derived];
   const steps: SetoutStep[] = [];
   while (waiting.length) {
@@ -48,7 +49,7 @@ export function setoutPlan(derived: readonly Pile[], measured: readonly Pile[], 
       const ins = instruction(p, placed, constraints);
       if (!ins) continue;
       steps.push({ pile: p, order: steps.length + 1, instruction: ins });
-      placed.set(p.id, p);
+      placed.set(p.point, p);
       waiting.splice(i--, 1);
       progress = true;
     }
@@ -59,10 +60,10 @@ export function setoutPlan(derived: readonly Pile[], measured: readonly Pile[], 
 }
 
 function instruction(p: Pile, placed: ReadonlyMap<string, Pile>, constraints: readonly Constraint[]): SetoutInstruction | null {
-  const mine = constraints.filter((c) => constraintPoints(c).includes(p.id));
+  const mine = constraints.filter((c) => constraintPoints(c).includes(p.point));
   // on a line between two placed piles → the string
   for (const c of mine)
-    if ((c.kind === 'ratio' || c.kind === 'onLine') && c.p === p.id) {
+    if ((c.kind === 'ratio' || c.kind === 'onLine') && c.p === p.point) {
       const from = placed.get(c.a);
       const to = placed.get(c.b);
       if (from && to) {
@@ -72,7 +73,7 @@ function instruction(p: Pile, placed: ReadonlyMap<string, Pile>, constraints: re
       }
     }
   // two tapes: partners from its own constraints first, then the nearest placed piles
-  const partners = mine.flatMap((c) => constraintPoints(c)).filter((id) => id !== p.id);
+  const partners = mine.flatMap((c) => constraintPoints(c)).filter((id) => id !== p.point);
   const candidates = [
     ...new Set([
       ...partners.filter((id) => placed.has(id)),

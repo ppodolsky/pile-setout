@@ -1,6 +1,6 @@
+import type { Point } from '@buildkit/cad';
 import type { Vec2 } from '@buildkit/geometry';
-import type { Pile } from '@buildkit/pile-field';
-import type { Constraint } from '@buildkit/sketch';
+import { constraintPoints, type Constraint } from '@buildkit/sketch';
 import { toScreen, useView } from '@/drawing';
 import { fmt } from '@/lib/format';
 
@@ -45,27 +45,25 @@ function Tag({
  * marks and fix anchors. Click a value or mark to select the constraint.
  */
 export function ConstraintGlyphs({
-  piles,
+  points,
   constraints,
   conflicts,
   selected,
   onPick,
 }: {
-  piles: readonly Pile[];
+  points: readonly Point[];
   constraints: readonly Constraint[];
   conflicts: ReadonlySet<string>;
   selected: string | null;
   onPick: (id: string) => void;
 }) {
   const v = useView();
-  const at = new Map(piles.map((p) => [p.id, p]));
+  const at = new Map(points.map((p) => [p.id, p]));
   const S = (id: string) => toScreen(v, at.get(id)!);
   return (
     <g>
       {constraints.map((c) => {
-        const ids = 'p' in c ? [c.p] : [];
-        if ([...ids, ...('a' in c ? [c.a, c.b] : []), ...(c.kind === 'angle' && c.ref ? [c.ref] : [])].some((id) => !at.has(id)))
-          return null;
+        if (constraintPoints(c).some((id) => !at.has(id))) return null;
         const color = conflicts.has(c.id) ? 'var(--err)' : c.id === selected ? 'var(--draw-select)' : 'var(--draw-param)';
         const pick = () => onPick(c.id);
         const line = (a: Vec2, b: Vec2, dash?: string, w = 0.9) => (
@@ -170,6 +168,23 @@ export function ConstraintGlyphs({
               </g>
             );
           }
+          case 'coincident': {
+            const p = S(c.a);
+            return (
+              <g key={c.id} onPointerDown={(e) => (e.stopPropagation(), pick())} style={{ cursor: 'pointer' }}>
+                <circle cx={p.x} cy={p.y} r={9} fill="none" stroke={color} strokeWidth={1.2} />
+              </g>
+            );
+          }
+          case 'parallel':
+          case 'perpendicular':
+          case 'equal': {
+            const c1 = S(c.c);
+            const d1 = S(c.d);
+            const m = { x: c1.x + (d1.x - c1.x) * 0.6, y: c1.y + (d1.y - c1.y) * 0.6 };
+            const glyph = c.kind === 'parallel' ? '∥' : c.kind === 'perpendicular' ? '⊥' : '=';
+            return <Tag key={c.id} x={m.x + 12} y={m.y - 12} text={glyph} color={color} onPick={pick} />;
+          }
           case 'ratio':
           case 'onLine': {
             const a = S(c.a);
@@ -183,39 +198,6 @@ export function ConstraintGlyphs({
             );
           }
         }
-      })}
-    </g>
-  );
-}
-
-/** Field work: the strings and tapes used to set out the piles that aren't measured. */
-export function SetoutLines({
-  steps,
-  map,
-}: {
-  steps: readonly { pile: Pile; instruction: { kind: 'string'; from: Pile; to: Pile } | { kind: 'swing'; a: Pile; b: Pile } | null }[];
-  map: (p: Vec2) => Vec2;
-}) {
-  const v = useView();
-  const S = (p: Vec2) => toScreen(v, map(p));
-  return (
-    <g stroke="var(--draw-param)" fill="none" opacity={0.85}>
-      {steps.map(({ pile, instruction: ins }) => {
-        if (!ins) return null;
-        const P = S(pile);
-        if (ins.kind === 'string') {
-          const a = S(ins.from);
-          const b = S(ins.to);
-          return <line key={pile.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={1} strokeDasharray="6 4" />;
-        }
-        const a = S(ins.a);
-        const b = S(ins.b);
-        return (
-          <g key={pile.id} strokeWidth={0.9} strokeDasharray="3 3">
-            <line x1={a.x} y1={a.y} x2={P.x} y2={P.y} />
-            <line x1={b.x} y1={b.y} x2={P.x} y2={P.y} />
-          </g>
-        );
       })}
     </g>
   );

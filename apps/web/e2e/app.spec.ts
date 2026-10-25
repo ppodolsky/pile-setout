@@ -80,12 +80,13 @@ test.describe('design (constraint sketch)', () => {
     await expect(page.getByText('can still move')).toBeVisible();
 
     await page.getByRole('radio', { name: 'Select & move' }).click();
-    await page.locator('[data-pile="C6"]').click({ modifiers: ['Shift'] });
-    await expect(page.getByText('2 piles', { exact: true })).toBeVisible();
+    await page.locator('[data-point="C6"]').click({ modifiers: ['Shift'] });
+    await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Distance + angle' }).click();
-    await expect(page.getByText('2 constraints between them')).toBeVisible();
+    // placement already snapped it vertical with C5 (auto-constraint), so only what's missing is added
+    await expect(page.getByText(/constraints? between them/)).toBeVisible();
 
-    await page.locator('[data-pile="C7"]').click();
+    await page.locator('[data-point="C7"]').click();
     await expect(page.getByText('fully constrained').first()).toBeVisible();
   });
 
@@ -100,26 +101,75 @@ test.describe('design (constraint sketch)', () => {
     await expect(page.getByText('5,958, 100')).toBeVisible();
   });
 
+  test('dragging a fully constrained pile drives its dimension', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'mouse drag is covered on desktop');
+    await fresh(page, '/piles/design');
+    const c3 = page.locator('[data-point="C3"]');
+    const box = (await c3.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 25, { steps: 8 });
+    await page.mouse.up();
+    // still on the row axis (y = 100) and the ΔX dimension follows the drag
+    await expect(page.getByText(/^[0-9,]+, 100$/).nth(2)).toBeVisible();
+    await expect(page.getByText('ΔX 5,858')).toHaveCount(0);
+    await expect(page.getByText('fully constrained').first()).toBeVisible();
+  });
+
+  test('draws a line between two piles and constrains it', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'pointer drawing is covered on desktop');
+    await fresh(page, '/piles/design');
+    await page.getByRole('radio', { name: /^Line/ }).click();
+    await page.locator('[data-point="C1"]').click();
+    await page.locator('[data-point="C6"]').click();
+    await page.keyboard.press('Escape'); // stop the line
+    await page.keyboard.press('Escape'); // back to select
+    await page.locator('[data-line]').last().click({ force: true });
+    await expect(page.getByText('Line', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Length' }).click();
+    // the plan is fully constrained, so its length is already determined — nothing is over-constrained
+    await expect(page.getByText('Nothing added — already determined by other constraints.')).toBeVisible();
+  });
+
   test('multi-select toggle picks several piles without a keyboard', async ({ page }) => {
     await fresh(page, '/piles/design');
     await page.getByRole('button', { name: 'Multi-select' }).click();
-    await page.locator('[data-pile="C1"]').click();
-    await page.locator('[data-pile="C4"]').click();
-    await expect(page.getByText('2 piles', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'New pile in the middle' })).toBeVisible();
+    await page.locator('[data-point="C1"]').click();
+    await page.locator('[data-point="C4"]').click();
+    await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New in the middle' })).toBeVisible();
   });
 
   test('a midpoint pile is set out on the string in field work', async ({ page }) => {
     await fresh(page, '/piles/design');
     await page.getByRole('button', { name: /^C1\b/ }).click();
     await page.getByRole('button', { name: /^C4\b/ }).click({ modifiers: ['Shift'] });
-    await page.getByRole('button', { name: 'New pile in the middle' }).click();
+    await page.getByRole('button', { name: 'New in the middle' }).click();
     await expect(page.getByText('Piles (7)')).toBeVisible();
     await page.getByRole('link', { name: 'Field work' }).click();
     await page.getByRole('button', { name: 'Demo errors' }).click();
     if ((page.viewportSize()?.width ?? 1000) < 1024) await page.getByRole('button', { name: 'Move plan' }).click();
     await expect(page.getByText('C1 → C4').first()).toBeVisible();
   });
+});
+
+test('keeps a library of named sketches', async ({ page }) => {
+  await fresh(page, '/piles/design');
+  await page.getByRole('button', { name: 'Project menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sketches…' }).click();
+  await page.getByLabel('This sketch').fill('Garage');
+  await page.getByRole('button', { name: 'New sketch' }).click();
+  await page.getByLabel('This sketch').fill('Shed');
+  await expect(page.getByText('Garage')).toBeVisible();
+  await page.getByRole('button', { name: 'Open Garage' }).click();
+  await page.getByRole('button', { name: 'Project menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sketches…' }).click();
+  await expect(page.getByLabel('This sketch')).toHaveValue('Garage');
+  await page.reload();
+  await page.getByRole('button', { name: 'Project menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sketches…' }).click();
+  await expect(page.getByLabel('This sketch')).toHaveValue('Garage');
+  await expect(page.getByText('Shed')).toBeVisible();
 });
 
 test('migrates a session saved by the first version', async ({ page }) => {

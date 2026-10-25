@@ -2,12 +2,15 @@ import {
   Anchor,
   ArrowLeftRight,
   ArrowUpDown,
+  CircleDot,
   Diameter,
+  Equal,
   GitCommitHorizontal,
   Minus,
   MoveDiagonal,
   Ruler,
   Spline,
+  SquareDot,
   TriangleRight,
 } from 'lucide-react';
 import type { Constraint, ConstraintKind } from '@buildkit/sketch';
@@ -24,22 +27,37 @@ export const CONSTRAINT_META: Record<ConstraintKind, { name: string; icon: typeo
   angle: { name: 'Angle', icon: TriangleRight, unit: '°' },
   ratio: { name: 'On line at ratio', icon: GitCommitHorizontal, unit: '' },
   onLine: { name: 'On line', icon: Spline },
+  coincident: { name: 'Coincident', icon: CircleDot },
+  parallel: { name: 'Parallel', icon: Equal },
+  perpendicular: { name: 'Perpendicular', icon: SquareDot },
+  equal: { name: 'Equal length', icon: Equal },
 };
 
+/** Icons for selection actions (by action id). */
 export const ACTION_ICON: Record<string, typeof Ruler> = {
   fix: Anchor,
-  'polar-pile': MoveDiagonal,
+  'polar-point': MoveDiagonal,
   distance: Ruler,
   'distance-angle': TriangleRight,
   horizontal: Minus,
   vertical: Diameter,
+  'line-horizontal': Minus,
+  'line-vertical': Diameter,
   dx: ArrowLeftRight,
   dy: ArrowUpDown,
-  'mid-pile': GitCommitHorizontal,
+  coincident: CircleDot,
+  'mid-point': GitCommitHorizontal,
+  'line-mid-point': GitCommitHorizontal,
   midpoint: GitCommitHorizontal,
+  'line-midpoint': GitCommitHorizontal,
   ratio: GitCommitHorizontal,
   online: Spline,
+  'on-line': Spline,
   'angle-ref': TriangleRight,
+  length: Ruler,
+  parallel: Equal,
+  perpendicular: SquareDot,
+  equal: Equal,
 };
 
 /** The editable number of a constraint, if any. */
@@ -60,6 +78,10 @@ export function constraintSubject(c: Constraint, L: (id: string) => string): str
       return `${L(c.p)} on ${L(c.a)}–${L(c.b)}`;
     case 'angle':
       return `${L(c.a)} → ${L(c.b)}${c.ref ? ` from →${L(c.ref)}` : ''}`;
+    case 'parallel':
+    case 'perpendicular':
+    case 'equal':
+      return `${L(c.a)}–${L(c.b)} & ${L(c.c)}–${L(c.d)}`;
     default:
       return `${L(c.a)} → ${L(c.b)}`;
   }

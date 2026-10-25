@@ -41,6 +41,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@buildkit/cad':
+        specifier: workspace:*
+        version: link:../../packages/cad
       '@buildkit/geometry':
         specifier: workspace:*
         version: link:../../packages/geometry
@@ -127,10 +130,35 @@ importers:
         specifier: ^7.4.1
         version: 7.4.1
 
+  packages/cad:
+    dependencies:
+      '@buildkit/geometry':
+        specifier: workspace:*
+        version: link:../geometry
+      '@buildkit/sketch':
+        specifier: workspace:*
+        version: link:../sketch
+
   packages/geometry: {}
+
+  packages/interop:
+    dependencies:
+      '@buildkit/geometry':
+        specifier: workspace:*
+        version: link:../geometry
+      '@buildkit/sketch':
+        specifier: workspace:*
+        version: link:../sketch
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
 
   packages/pile-field:
     dependencies:
+      '@buildkit/cad':
+        specifier: workspace:*
+        version: link:../cad
       '@buildkit/geometry':
         specifier: workspace:*
         version: link:../geometry

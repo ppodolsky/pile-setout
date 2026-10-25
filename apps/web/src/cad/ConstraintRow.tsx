@@ -1,23 +1,32 @@
 import { Trash2 } from 'lucide-react';
-import type { Pile } from '@buildkit/pile-field';
-import type { Constraint } from '@buildkit/sketch';
+import type { CadConstraint, Point } from '@buildkit/cad';
 import { NativeSelect } from '@/components/native-select';
 import { NumberInput } from '@/components/number-input';
 import { cn } from '@/lib/utils';
-import { pileLabel } from '../model/derived';
-import { useEditor } from '../model/editor';
-import { useProject } from '../model/store';
+import { useCadEditor } from './editor';
 import { CONSTRAINT_META, constraintSubject, constraintValue } from './meta';
+import type { CadOps } from './ops';
 
 /** One constraint: what it ties, its value (editable), angle reference, delete. */
-export function ConstraintRow({ c, piles, conflict }: { c: Constraint; piles: readonly Pile[]; conflict: boolean }) {
-  const { updateConstraint, deleteConstraint } = useProject.getState();
-  const selected = useEditor((s) => s.constraint === c.id);
-  const selectConstraint = useEditor((s) => s.selectConstraint);
+export function ConstraintRow({
+  c,
+  points,
+  labelOf,
+  ops,
+  conflict,
+}: {
+  c: CadConstraint;
+  points: readonly Point[];
+  labelOf: (id: string) => string;
+  ops: CadOps;
+  conflict: boolean;
+}) {
+  const selected = useCadEditor((s) => s.constraint === c.id);
+  const selectConstraint = useCadEditor((s) => s.selectConstraint);
   const meta = CONSTRAINT_META[c.kind];
   const Icon = meta.icon;
   const value = constraintValue(c);
-  const L = (id: string) => pileLabel(piles, id);
+  const L = (id: string) => labelOf(id) || '·';
   return (
     <li
       className={cn(
@@ -36,7 +45,7 @@ export function ConstraintRow({ c, piles, conflict }: { c: Constraint; piles: re
           aria-label={`Delete ${meta.name} constraint`}
           onClick={(e) => {
             e.stopPropagation();
-            deleteConstraint(c.id);
+            ops.remove({ constraints: [c.id] });
           }}
         >
           <Trash2 className="size-3.5" />
@@ -51,7 +60,7 @@ export function ConstraintRow({ c, piles, conflict }: { c: Constraint; piles: re
                 value={value.value}
                 digits={value.key === 't' ? 4 : 2}
                 aria-label={`${meta.name} value`}
-                onValue={(v) => v != null && updateConstraint(c.id, { [value.key]: v } as Partial<Constraint>)}
+                onValue={(v) => v != null && ops.updateConstraint(c.id, { [value.key]: v })}
               />
               <span className="text-xs text-muted-foreground">
                 {meta.unit === '' ? '(0 = first, 1 = second, 0.5 = middle)' : meta.unit}
@@ -64,13 +73,13 @@ export function ConstraintRow({ c, piles, conflict }: { c: Constraint; piles: re
                 className="h-7 w-24 text-xs"
                 value={c.x}
                 aria-label="Fixed X"
-                onValue={(x) => x != null && useProject.getState().movePile(c.p, { x, y: c.y }, { moveFix: true })}
+                onValue={(x) => x != null && ops.setPointPosition(c.p, { x, y: c.y })}
               />
               <NumberInput
                 className="h-7 w-24 text-xs"
                 value={c.y}
                 aria-label="Fixed Y"
-                onValue={(y) => y != null && useProject.getState().movePile(c.p, { x: c.x, y }, { moveFix: true })}
+                onValue={(y) => y != null && ops.setPointPosition(c.p, { x: c.x, y })}
               />
             </>
           )}
@@ -78,15 +87,15 @@ export function ConstraintRow({ c, piles, conflict }: { c: Constraint; piles: re
             <NativeSelect
               className="w-full"
               value={c.ref ?? ''}
-              onChange={(e) => updateConstraint(c.id, { ref: e.target.value || null } as Partial<Constraint>)}
+              onChange={(e) => ops.updateConstraint(c.id, { ref: e.target.value || null })}
               aria-label="Angle measured from"
             >
               <option value="">from the X axis</option>
-              {piles
+              {points
                 .filter((p) => p.id !== c.a && p.id !== c.b)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
-                    from direction {L(c.a)} → {p.label}
+                    from direction {L(c.a)} → {L(p.id)}
                   </option>
                 ))}
             </NativeSelect>

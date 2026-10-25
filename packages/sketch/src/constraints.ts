@@ -29,7 +29,15 @@ export type Constraint =
   /** p = a + t·(b − a). */
   | { readonly id: string; readonly kind: 'ratio'; readonly p: string; readonly a: string; readonly b: string; readonly t: number }
   /** p on the line through a and b. */
-  | { readonly id: string; readonly kind: 'onLine'; readonly p: string; readonly a: string; readonly b: string };
+  | { readonly id: string; readonly kind: 'onLine'; readonly p: string; readonly a: string; readonly b: string }
+  /** a and b at the same place. */
+  | { readonly id: string; readonly kind: 'coincident'; readonly a: string; readonly b: string }
+  /** Line a–b parallel to line c–d. */
+  | { readonly id: string; readonly kind: 'parallel'; readonly a: string; readonly b: string; readonly c: string; readonly d: string }
+  /** Line a–b perpendicular to line c–d. */
+  | { readonly id: string; readonly kind: 'perpendicular'; readonly a: string; readonly b: string; readonly c: string; readonly d: string }
+  /** |a–b| = |c–d|. */
+  | { readonly id: string; readonly kind: 'equal'; readonly a: string; readonly b: string; readonly c: string; readonly d: string };
 
 export type ConstraintKind = Constraint['kind'];
 
@@ -43,13 +51,17 @@ export function constraintPoints(c: Constraint): string[] {
       return [c.p, c.a, c.b];
     case 'angle':
       return c.ref ? [c.a, c.b, c.ref] : [c.a, c.b];
+    case 'parallel':
+    case 'perpendicular':
+    case 'equal':
+      return [c.a, c.b, c.c, c.d];
     default:
       return [c.a, c.b];
   }
 }
 
 /** Number of scalar equations of a constraint. */
-export const equationCount = (c: Constraint): number => (c.kind === 'fix' || c.kind === 'ratio' ? 2 : 1);
+export const equationCount = (c: Constraint): number => (c.kind === 'fix' || c.kind === 'ratio' || c.kind === 'coincident' ? 2 : 1);
 
 const RAD = Math.PI / 180;
 
@@ -102,7 +114,32 @@ export function residuals(c: Constraint, at: (id: string) => Vec2): number[] {
       const L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       return [((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / L];
     }
+    case 'coincident': {
+      const a = at(c.a);
+      const b = at(c.b);
+      return [b.x - a.x, b.y - a.y];
+    }
+    case 'parallel':
+    case 'perpendicular': {
+      const u = unit(at(c.a), at(c.b));
+      const w = unit(at(c.c), at(c.d));
+      // sine (parallel) or cosine (perpendicular) of the angle, scaled by the second line's length → mm
+      const L = Math.hypot(at(c.d).x - at(c.c).x, at(c.d).y - at(c.c).y);
+      return [(c.kind === 'parallel' ? u.x * w.y - u.y * w.x : u.x * w.x + u.y * w.y) * L];
+    }
+    case 'equal': {
+      const a = at(c.a);
+      const b = at(c.b);
+      const p = at(c.c);
+      const q = at(c.d);
+      return [Math.hypot(b.x - a.x, b.y - a.y) - Math.hypot(q.x - p.x, q.y - p.y)];
+    }
   }
+}
+
+function unit(a: Vec2, b: Vec2): Vec2 {
+  const L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: (b.x - a.x) / L, y: (b.y - a.y) / L };
 }
 
 /** The value a dimensional constraint would have at the current positions (to create it "as is"). */

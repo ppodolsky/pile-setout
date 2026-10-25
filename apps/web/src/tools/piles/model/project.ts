@@ -1,11 +1,10 @@
-import { generateDesign, type Constraint, type Measurement, type ParametricMode, type Pile, type TemplateSpec } from './deps';
+import { generateDesign, solveDocument, type Measurement, type ParametricMode, type PileDesign, type TemplateSpec } from './deps';
 
-/** Design: the container template and the pile sketch (piles + constraints) built from it. */
+/** Design: the container template and the pile plan (a CAD document whose elements are piles). */
 export interface DesignState {
   readonly template: TemplateSpec;
-  readonly piles: readonly Pile[];
-  readonly constraints: readonly Constraint[];
-  /** Edited by hand: template changes no longer regenerate the sketch automatically. */
+  readonly doc: PileDesign;
+  /** Edited by hand: template changes no longer regenerate the plan automatically. */
   readonly edited: boolean;
 }
 
@@ -36,7 +35,7 @@ export interface ProjectData {
 export const DEFAULT_TEMPLATE: TemplateSpec = { containers: ['20'], head: 200, inset: 0 };
 
 export function designFromTemplate(template: TemplateSpec): DesignState {
-  return { template, ...generateDesign(template), edited: false };
+  return { template, doc: solveDocument(generateDesign(template)).doc, edited: false };
 }
 
 export function newProject(): ProjectData {

@@ -1,15 +1,15 @@
 import { CircleCheck, CircleDashed, Crosshair, Ruler } from 'lucide-react';
+import { useCadEditor, isSelected } from '@/cad';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useDesign } from '../model/derived';
-import { useEditor } from '../model/editor';
 
 /** All piles: constraint status, field-work role, position. Click to select, Shift-click to add. */
 export function PileList() {
   const { piles, status } = useDesign();
-  const selected = useEditor((s) => s.selected);
-  const { select, toggle } = useEditor.getState();
+  const selection = useCadEditor((s) => s.selection);
+  const { select, toggle } = useCadEditor.getState();
   return (
     <Card className="gap-2 py-4">
       <CardHeader className="px-4">
@@ -18,15 +18,16 @@ export function PileList() {
       <CardContent className="px-2">
         <ul className="divide-y">
           {piles.map((p) => {
-            const done = status.determined.has(p.id);
+            const ref = { kind: 'point' as const, id: p.point };
+            const done = status.determined.has(p.point);
             return (
               <li key={p.id}>
                 <button
                   className={cn(
                     'grid w-full grid-cols-[1rem_2.5rem_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted',
-                    selected.includes(p.id) && 'bg-accent text-accent-foreground hover:bg-accent',
+                    isSelected(selection, ref) && 'bg-accent text-accent-foreground hover:bg-accent',
                   )}
-                  onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? toggle(p.id) : select([p.id]))}
+                  onClick={(e) => (e.shiftKey || e.metaKey || e.ctrlKey ? toggle(ref) : select([ref]))}
                 >
                   {done ? <CircleCheck className="size-3.5 text-ok" /> : <CircleDashed className="size-3.5 text-[var(--draw-free)]" />}
                   <span className="font-mono font-semibold">{p.label}</span>

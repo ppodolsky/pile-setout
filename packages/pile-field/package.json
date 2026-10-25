@@ -12,6 +12,7 @@
   "dependencies": {
     "@buildkit/geometry": "workspace:*",
     "@buildkit/survey": "workspace:*",
-    "@buildkit/sketch": "workspace:*"
+    "@buildkit/sketch": "workspace:*",
+    "@buildkit/cad": "workspace:*"
   }
 }

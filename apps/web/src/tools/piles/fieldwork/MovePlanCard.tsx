@@ -7,7 +7,7 @@ import { fmt, plural, sfmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { MiniMap, MoveDiagram, StringDiagram, SwingDiagram } from '../drawing/cards';
 import { pileLabel, useFieldwork } from '../model/derived';
-import { useEditor } from '../model/editor';
+import { useCadEditor } from '@/cad';
 import { useProject } from '../model/store';
 import { sideNames } from './helpers';
 
@@ -214,7 +214,7 @@ function SetoutCard({ step, piles }: { step: SetoutStep; piles: readonly Pile[] 
 /** Cards in the field's own arrangement (rows × columns) when it fits, otherwise in move order. */
 function CardsGrid({ plan, piles, setout }: { plan: Plan; piles: readonly Pile[]; setout: readonly SetoutStep[] }) {
   const tol = useProject((s) => s.fieldwork.tolerance);
-  const hover = useEditor((s) => s.hover);
+  const hover = useCadEditor((s) => s.hover);
   const host = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {

@@ -2,11 +2,13 @@ import { useMemo } from 'react';
 import {
   computePlan,
   containerOutlines,
+  pilesOf,
   setoutPlan,
-  solveDesign,
+  solveDocument,
   suggestNext,
-  type DesignStatus,
+  type DocumentStatus,
   type Pile,
+  type PileDesign,
   type Plan,
   type SetoutStep,
   type Suggestion,
@@ -14,18 +16,22 @@ import {
 import { useProject } from './store';
 
 export interface DesignView {
+  readonly doc: PileDesign;
   readonly piles: readonly Pile[];
-  readonly status: DesignStatus;
+  readonly status: DocumentStatus;
+  /** Label of a point: its pile's label, or empty for a bare point. */
+  readonly labelOf: (pointId: string) => string;
 }
 
-/** The sketch with its solver status (conflicts, which piles are fully determined). */
+/** The plan with its solver status (conflicts, which points are fully determined). */
 export function useDesign(): DesignView {
-  const piles = useProject((s) => s.design.piles);
-  const constraints = useProject((s) => s.design.constraints);
+  const doc = useProject((s) => s.design.doc);
   return useMemo(() => {
-    const { status } = solveDesign({ piles, constraints });
-    return { piles, status };
-  }, [piles, constraints]);
+    const { status } = solveDocument(doc);
+    const piles = pilesOf(doc);
+    const byPoint = new Map(piles.map((p) => [p.point, p.label]));
+    return { doc, piles, status, labelOf: (id: string) => byPoint.get(id) ?? '' };
+  }, [doc]);
 }
 
 export function useOutlines() {
@@ -43,10 +49,10 @@ export interface FieldworkView {
 
 /** The field-work calculation for the current design and measurements. */
 export function useFieldwork(): FieldworkView {
-  const piles = useProject((s) => s.design.piles);
-  const constraints = useProject((s) => s.design.constraints);
+  const doc = useProject((s) => s.design.doc);
   const fw = useProject((s) => s.fieldwork);
   return useMemo(() => {
+    const piles = pilesOf(doc);
     const plan = computePlan({
       piles,
       measurements: fw.measurements,
@@ -54,8 +60,8 @@ export function useFieldwork(): FieldworkView {
       pinned: new Set(fw.pinned),
       parametric: fw.parametric,
     });
-    return { piles, plan, next: suggestNext(plan, fw.measurements), setout: setoutPlan(plan.derived, plan.measured, constraints) };
-  }, [piles, constraints, fw]);
+    return { piles, plan, next: suggestNext(plan, fw.measurements), setout: setoutPlan(plan.derived, plan.measured, doc.constraints) };
+  }, [doc, fw]);
 }
 
 export const pileLabel = (piles: readonly { id: string; label: string }[], id: string): string =>

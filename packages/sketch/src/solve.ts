@@ -26,8 +26,8 @@ export interface SketchSolution {
 
 /** Step damping per coordinate: tiny for ordinary points (they move as little as possible). */
 const STAY = 1e-9;
-/** A dragged point is much "heavier": the others give way around it, unless they are fixed. */
-const HELD = 1e-2;
+/** A dragged point is far "heavier": the others give way around it, unless they are fixed. */
+const HELD = 1;
 
 /**
  * Solves a sketch by Levenberg–Marquardt from the current positions. The damping is weighted per
@@ -56,7 +56,7 @@ export function solveSketch(points: readonly SketchPoint[], constraints: readonl
   const resid = (v: number[]): number[] => valid.flatMap((c) => residuals(c, at(v)));
   const cost = (r: number[]) => r.reduce((s, v) => s + v * v, 0);
 
-  let lambda = 1e-3;
+  let lambda = 1e-6;
   let converged = false;
   let r = resid(x);
   let fx = cost(r);
@@ -89,7 +89,8 @@ export function solveSketch(points: readonly SketchPoint[], constraints: readonl
         for (let j = 0; j < m; j++) if (row[j]) A[i]![j]! += ji * row[j]!;
       }
     }
-    for (let i = 0; i < m; i++) A[i]![i]! += weight[i]! + lambda * A[i]![i]!;
+    // additive damping keeps the per-point weights meaningful (who gives way, and by how much)
+    for (let i = 0; i < m; i++) A[i]![i]! += weight[i]! + lambda;
     const step = linsolve(
       A,
       g.map((v) => -v),
