@@ -7,19 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=86a67f8ede">
+<link rel="stylesheet" href="styles.css?v=5f23534124">
 </head>
 <body>
 <header class="top">
-  <div class="wrap top-row">
-    <div>
+  <div class="wrap">
+    <div class="top-row">
       <h1>Pile Field Setout</h1>
-      <p class="sub">Design axes and tape measurements → which piles to move, and where, in the fewest moves</p>
+      <button class="ghost session-btn" id="newSession" type="button">New session</button>
     </div>
-    <div class="session">
-      <button class="ghost" id="newSession" type="button">New session</button>
-      <span>Saved automatically on this device</span>
-    </div>
+    <p class="sub">Design axes and tape measurements → which piles to move, and where, in the fewest moves. <span class="saved">Saved automatically on this device.</span></p>
   </div>
 </header>
 
@@ -54,6 +51,7 @@
 
     <div class="card">
       <h2>2. Measurements between piles</h2>
+      <div id="measNext"></div>
       <div id="measRows"></div>
       <button class="ghost" id="addMeas" type="button">+ add measurement</button>
       <div class="toolbar">
@@ -125,6 +123,6 @@
   <p>Corner-casting dimensions per ISO 668 (Annex A): S/P for 10', 20' and 40' = 2787/5853/11985 × 2259 mm. Sources: <a href="https://standards.isodoc.my/iso/ISO%20668-2020%20PDF.pdf" target="_blank" rel="noopener">ISO 668:2020</a>, <a href="https://www.william-cook.co.uk/_media/images/client-uploads/corners.pdf" target="_blank" rel="noopener">William Cook — ISO corner castings</a>. In a container combination, each joint between two containers sits on one shared pile centred on the joint line, carrying the corner castings of both containers. With the default 200 mm flush heads the corner pile centres are 100 mm from the edges, within a few mm of the corner-casting aperture centres (102–103.5 mm from the ends, 89.5 mm from the sides). Intermediate supports (including the middle supports of the 20' field) are an editable starting point: before pouring concrete, check their contact with the longitudinal beams of the actual container (measure the gap with a feeler gauge with the container resting on its corner castings).</p>
 </footer>
 
-<script src="app.js?v=86a67f8ede"></script>
+<script src="app.js?v=5f23534124"></script>
 </body>
 </html>

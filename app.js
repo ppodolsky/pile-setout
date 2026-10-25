@@ -589,7 +589,7 @@ function pairOptions(sel) {
 function renderMeas() {
   const wrap = $('#measRows');
   if (!state.meas.length) {
-    wrap.innerHTML = '<p class="hint" style="margin:0 0 var(--space-3)">No measurements yet. Each “+ add measurement” suggests the next recommended pair (along the rows, across, then diagonals) — change the piles if you measured something else.</p>';
+    wrap.innerHTML = '<p class="hint" style="margin:0 0 var(--space-3)">No measurements yet. Start with the suggestion above, or “+ add measurement” — change the piles if you measured something else.</p>';
     return;
   }
   wrap.innerHTML = state.meas.map((m, i) => {
@@ -646,12 +646,159 @@ function inheritCorr(i) {
   if (m.corr == null) m.corr = knownCorr(m[m.end], i);
 }
 
-/** Next pair of the recommended set (chains, cross ties, diagonals) that isn't measured yet. */
+function pairKey(a, b) { return [a, b].sort().join('|'); }
+
+/** Pair for "+ add measurement": the advisor's suggestion, else the next unlisted recommended pair. */
 function nextSuggestedPair() {
-  const key = (a, b) => [a, b].sort().join('|');
-  const have = new Set(state.meas.map(m => key(m.a, m.b)));
-  const next = defaultMeas(state.piles).find(m => !have.has(key(m.a, m.b)));
+  const s = lastAdvice;
+  if (s && s.a && s.i == null && (s.kind === 'fix' || s.kind === 'check')) return { a: s.a, b: s.b };
+  const have = new Set(state.meas.map(m => pairKey(m.a, m.b)));
+  const next = defaultMeas(state.piles).find(m => !have.has(pairKey(m.a, m.b)));
   return next ? { a: next.a, b: next.b } : { a: state.piles[0].label, b: state.piles[1].label };
+}
+
+/* ============================== what to measure next ============================== */
+let lastAdvice = null;
+
+/**
+ * Picks the single most useful next measurement:
+ * 1. re-measure a reading that contradicts the others;
+ * 2. until the field is determined — the first pair (already-listed empty rows first, then the
+ *    recommended set, then any pair by length) that raises the rigidity rank, i.e. adds information;
+ * 3. then the rest of the recommended set as check measurements (they catch misread tapes).
+ */
+function suggestNext(res) {
+  const design = state.piles;
+  if (design.length < 2) return null;
+  const labels = new Set(design.map(p => p.label));
+  const byPair = new Map(); // pair → row index of an existing row without a reading
+  state.meas.forEach((m, i) => {
+    if (m.value == null && labels.has(m.a) && labels.has(m.b) && m.a !== m.b && !byPair.has(pairKey(m.a, m.b)))
+      byPair.set(pairKey(m.a, m.b), i);
+  });
+  const rowOf = (a, b) => byPair.get(pairKey(a, b));
+
+  if (res.status === 'contradictory') {
+    const w = [...res.fit.residuals].sort((x, y) => Math.abs(y.fitErr) - Math.abs(x.fitErr))[0];
+    const i = state.meas.findIndex(m => pairKey(m.a, m.b) === pairKey(w.a, w.b) && m.value != null);
+    return { kind: 'remeasure', a: w.a, b: w.b, i: i < 0 ? null : i, err: w.fitErr };
+  }
+
+  const used = validMeas(design, state.meas);
+  const need = 2 * design.length - 3;
+  const rank = used.length ? rigidityRank(design, used) : 0;
+  const done = new Set(used.map(m => pairKey(m.a, m.b)));
+  const recommended = defaultMeas(design);
+  const all = [];
+  for (let i = 0; i < design.length; i++) for (let j = i + 1; j < design.length; j++)
+    all.push({ a: design[i].label, b: design[j].label, d: dist(design[i], design[j]) });
+  all.sort((x, y) => x.d - y.d);
+  const pendingRows = state.meas.filter(m => byPair.has(pairKey(m.a, m.b)));
+  const seen = new Set();
+  const candidates = [...pendingRows, ...recommended, ...all].filter(c => {
+    const k = pairKey(c.a, c.b);
+    if (c.a === c.b || done.has(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const recDone = recommended.filter(c => done.has(pairKey(c.a, c.b))).length;
+  const base = { rank, need, extra: used.length - rank, recDone, recTotal: recommended.length };
+
+  if (rank < need) {
+    for (const c of candidates) {
+      if (rigidityRank(design, [...used, c]) > rank) return { ...base, kind: 'fix', a: c.a, b: c.b, i: rowOf(c.a, c.b) };
+    }
+  }
+  const next = recommended.find(c => !done.has(pairKey(c.a, c.b)));
+  if (next) return { ...base, kind: 'check', a: next.a, b: next.b, i: rowOf(next.a, next.b) };
+  return { ...base, kind: 'done' };
+}
+
+/** Mini map of the field with the suggested pair joined by a line. */
+function pairMap(piles, a, b) {
+  const xs = piles.map(p => p.x), ys = piles.map(p => p.y);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys);
+  const w = Math.max(Math.max(...xs) - x0, 1), h = Math.max(Math.max(...ys) - y0, 1);
+  const W = 132, H = Math.max(28, Math.min(64, W * h / w));
+  const pt = p => [8 + (p.x - x0) / w * (W - 16), 8 + (p.y - y0) / h * (H - 16)];
+  const pa = piles.find(p => p.label === a), pb = piles.find(p => p.label === b);
+  let s = `<svg class="next-map" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">`;
+  s += `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="3" fill="#eceee9" stroke="#c9c6bf"/>`;
+  if (pa && pb) {
+    const [x1, y1] = pt(pa), [x2, y2] = pt(pb);
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#01696f" stroke-width="2.4" stroke-linecap="round"/>`;
+  }
+  for (const p of piles) {
+    const [x, y] = pt(p);
+    const on = p === pa || p === pb;
+    s += `<circle cx="${x}" cy="${y}" r="${on ? 4 : 2}" fill="${on ? '#01696f' : '#a3a6ac'}"/>`;
+  }
+  return s + `</svg>`;
+}
+
+function pairKind(a, b) {
+  const pa = state.piles.find(p => p.label === a), pb = state.piles.find(p => p.label === b);
+  if (!pa || !pb) return '';
+  if (Math.abs(pa.y - pb.y) < 0.6) return 'along the row';
+  if (Math.abs(pa.x - pb.x) < 0.6) return 'across';
+  return 'diagonal';
+}
+
+function renderNext(res) {
+  const box = $('#measNext');
+  const s = suggestNext(res);
+  lastAdvice = s;
+  if (!s) { box.innerHTML = ''; return; }
+  const progress = s.kind === 'remeasure' ? '' : s.rank < s.need
+    ? `<span>Field fixed: <b>${s.rank}</b> / ${s.need}</span>`
+    : `<span class="ok">Field fixed ✓ · ${s.extra} check${s.extra === 1 ? '' : 's'}</span>`;
+  const bar = s.kind === 'remeasure' ? '' : `<div class="next-bar"><span style="width:${Math.min(100, 100 * s.rank / Math.max(s.need, 1))}%"></span></div>`;
+  if (s.kind === 'done') {
+    box.innerHTML = `<div class="next-box done"><div class="next-head"><span class="next-title">Next to measure</span>${progress}</div>
+      <div class="next-why">All ${s.recTotal} recommended measurements are in. Follow the move plan; after moving a pile, re-measure its pairs and update the readings.</div></div>`;
+    return;
+  }
+  const pa = state.piles.find(p => p.label === s.a), pb = state.piles.find(p => p.label === s.b);
+  const d = pa && pb ? dist(pa, pb) : null;
+  const left = s.need - s.rank;
+  const why = {
+    remeasure: `This reading doesn't fit the others (off by about <b>${sfmt(s.err)} mm</b>) — probably misread or mistyped. Measure it again before moving any pile.`,
+    fix: `Adds new information about the field shape. ${left} more independent measurement${left === 1 ? '' : 's'} needed before the move plan can be computed.`,
+    check: `The field is fixed. Optional check measurement — extra readings let the app spot a misread tape (recommended set: ${s.recDone} / ${s.recTotal}).`,
+  }[s.kind];
+  const action = s.i != null
+    ? `<button class="next-btn" type="button" data-next-go="${s.i}">Go to row</button>`
+    : `<button class="next-btn" type="button" data-next-add>Add</button>`;
+  box.innerHTML = `<div class="next-box ${s.kind}">
+    <div class="next-head"><span class="next-title">${s.kind === 'remeasure' ? 'Re-measure' : 'Next to measure'}</span>${progress}</div>
+    ${bar}
+    <div class="next-main">
+      ${pairMap(state.piles, s.a, s.b)}
+      <div class="next-pair">
+        <b>${esc(s.a)} ↔ ${esc(s.b)}</b>
+        <div class="next-kind">${pairKind(s.a, s.b)}</div>
+        ${d != null ? `<div class="next-d">design ≈ ${fmt(d, 0)} mm</div>` : ''}
+      </div>
+      ${action}
+    </div>
+    <div class="next-why">${why}</div>
+  </div>`;
+}
+
+function focusMeasRow(i) {
+  const input = document.querySelector(`#measRows [data-i="${i}"][data-f="value"]`);
+  if (!input) return;
+  input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  input.focus({ preventScroll: true });
+  input.select();
+}
+
+function addMeas(a, b) {
+  state.meas.push(newMeas(a, b));
+  inheritCorr(state.meas.length - 1);
+  renderMeas();
+  renderResults();
+  focusMeasRow(state.meas.length - 1);
 }
 
 function newMeas(a, b) {
@@ -1055,6 +1202,7 @@ function renderResults() {
   renderAdvice(res);
   renderMoves(res);
   renderPlan(res);
+  renderNext(res);
   saveState();
 }
 
@@ -1141,12 +1289,12 @@ $('#measRows').addEventListener('click', e => {
 $('#addMeas').addEventListener('click', () => {
   if (state.piles.length < 2) return;
   const { a, b } = nextSuggestedPair();
-  state.meas.push(newMeas(a, b));
-  inheritCorr(state.meas.length - 1);
-  renderMeas();
-  renderResults();
-  const inputs = document.querySelectorAll('#measRows [data-f="value"]');
-  inputs[inputs.length - 1]?.focus();
+  addMeas(a, b);
+});
+$('#measNext').addEventListener('click', e => {
+  const go = e.target.closest('[data-next-go]');
+  if (go) { focusMeasRow(+go.dataset.nextGo); return; }
+  if (e.target.closest('[data-next-add]') && lastAdvice) addMeas(lastAdvice.a, lastAdvice.b);
 });
 
 /** Test helpers work on the recommended set when no measurements were added yet. */

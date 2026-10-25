@@ -55,9 +55,9 @@ input, button, select { transition: border-color var(--transition-interactive), 
   margin-bottom: var(--space-6);
 }
 .top h1 { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.01em; }
-.top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.session { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); font-size: var(--text-xs); color: var(--color-text-muted); }
-.session .ghost { background: var(--color-surface-2); }
+.top-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.session-btn { flex: none; background: var(--color-surface-2); padding: var(--space-1) var(--space-3); }
+.top .saved { white-space: nowrap; color: var(--color-text-faint); }
 .top .sub { color: var(--color-text-muted); font-size: var(--text-sm); margin-top: var(--space-1); }
 
 .wrap { max-width: 1240px; margin: 0 auto; padding: 0 var(--space-5); }
@@ -124,6 +124,26 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .toolbar .field.inline span { font-size: var(--text-xs); color: var(--color-text-muted); }
 .toolbar input[type="number"] { width: 84px; }
+
+/* what to measure next */
+.next-box { border: 1px solid rgba(1,105,111,0.35); background: rgba(1,105,111,0.05); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.next-box.remeasure { border-color: rgba(179,38,30,0.45); background: rgba(179,38,30,0.05); }
+.next-box.done { border-color: rgba(47,125,50,0.4); background: rgba(47,125,50,0.06); }
+.next-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.next-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-primary); }
+.next-box.remeasure .next-title { color: var(--color-err); }
+.next-box.done .next-title { color: var(--color-ok); }
+.next-bar { height: 4px; border-radius: 2px; background: var(--color-divider); overflow: hidden; }
+.next-bar span { display: block; height: 100%; background: var(--color-primary); transition: width var(--transition-interactive); }
+.next-main { display: flex; align-items: center; gap: var(--space-3); }
+.next-map { flex: none; display: block; }
+.next-pair { flex: 1; min-width: 0; }
+.next-pair b { font-size: var(--text-lg); font-family: var(--font-mono); white-space: nowrap; }
+.next-kind, .next-d { font-size: var(--text-xs); color: var(--color-text-muted); }
+.next-btn { flex: none; background: var(--color-primary); color: #fff; border-radius: var(--radius-sm); padding: var(--space-2) var(--space-4); font-weight: 600; font-size: var(--text-sm); }
+.next-btn:hover { background: var(--color-primary-hover); }
+.next-box.remeasure .next-btn { background: var(--color-err); }
+.next-why { font-size: var(--text-xs); color: var(--color-text-muted); }
 
 /* measurement rows: pair + reading on one line, correction on a compact second line */
 .meas-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--color-divider); }
@@ -260,6 +280,7 @@ details.numbers[open] summary { margin-bottom: var(--space-3); }
   .mv-to { display: block; padding-left: 1.3em; }
   .plan-tools { gap: var(--space-2) var(--space-4); }
   .meas-main { gap: var(--space-1); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) 46px 22px; }
+  .next-map { width: 96px; height: auto; }
   .lbl-long { display: none; }
   .lbl-short { display: inline; }
   .meas-corr input[type="number"] { width: 56px; }
