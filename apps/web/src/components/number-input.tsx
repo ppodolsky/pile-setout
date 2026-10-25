@@ -17,7 +17,7 @@ export interface NumberInputProps extends Omit<React.ComponentProps<'input'>, 'v
  * Text field for numbers: keeps what the user types (partial input, decimal comma), commits only
  * valid values and flags invalid ones. Follows external value changes when not focused.
  */
-export function NumberInput({ value, onValue, min, max, allowEmpty, digits = 2, className, ...rest }: NumberInputProps) {
+export function NumberInput({ value, onValue, min, max, allowEmpty, digits = 2, className, onFocus, onBlur, ...rest }: NumberInputProps) {
   const show = (v: number | null) => (v == null ? '' : String(Math.round(v * 10 ** digits) / 10 ** digits));
   const [text, setText] = useState(show(value));
   const [focused, setFocused] = useState(false);
@@ -34,8 +34,14 @@ export function NumberInput({ value, onValue, min, max, allowEmpty, digits = 2, 
       value={text}
       aria-invalid={invalid || undefined}
       className={cn('font-mono', className)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
       onChange={(e) => {
         const t = e.target.value;
         setText(t);

@@ -16,6 +16,8 @@ export interface FieldworkState {
   readonly pinned: readonly string[];
   /** Piles marked "set out from neighbours": set out after the others, or measured too. */
   readonly parametric: ParametricMode;
+  /** Piles reported as moved on site since their readings were taken. */
+  readonly moved?: readonly string[];
 }
 
 export interface ViewState {

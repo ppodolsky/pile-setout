@@ -47,6 +47,9 @@ importers:
       '@buildkit/geometry':
         specifier: workspace:*
         version: link:../../packages/geometry
+      '@buildkit/interop':
+        specifier: workspace:*
+        version: link:../../packages/interop
       '@buildkit/pile-field':
         specifier: workspace:*
         version: link:../../packages/pile-field

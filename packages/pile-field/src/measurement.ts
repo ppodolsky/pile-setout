@@ -16,7 +16,12 @@ export interface Measurement {
   readonly correctionA: number | null;
   /** Fixed extra length at end `b`, mm (null = none). */
   readonly correctionB: number | null;
+  /** Reading before one of its piles was moved — kept to show while it waits to be re-measured. */
+  readonly previous?: number | null;
 }
+
+/** True while a measurement waits to be re-measured after one of its piles was moved. */
+export const awaitsRemeasure = (m: Measurement): boolean => m.reading == null && m.previous != null;
 
 /** Distance between the two nails: reading minus both end corrections. */
 export function correctedLength(m: Measurement): number | null {

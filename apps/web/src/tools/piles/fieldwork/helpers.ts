@@ -1,3 +1,4 @@
+import { useFieldworkUi } from './ui';
 import type { Pile } from '@buildkit/pile-field';
 
 /** Along the row / across / diagonal, from the design positions. */
@@ -34,8 +35,9 @@ export function sideNames(piles: readonly Pile[]): Record<'x+' | 'x-' | 'y+' | '
   };
 }
 
-/** Moves the focus to a measurement's reading field. */
+/** Moves the focus to a measurement's reading field (switching to the Measure panel on phones). */
 export function focusReading(id: string): void {
+  useFieldworkUi.getState().setTab('measure');
   requestAnimationFrame(() => {
     const el = document.querySelector<HTMLInputElement>(`[data-reading="${id}"]`);
     if (!el) return;

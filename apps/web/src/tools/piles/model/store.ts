@@ -51,6 +51,8 @@ export interface ProjectActions {
   updateMeasurement(id: string, patch: Partial<Omit<Measurement, 'id'>>): void;
   deleteMeasurement(id: string): void;
   togglePin(id: string): void;
+  /** The pile was moved on site: its readings become "to re-measure" (old values kept for reference). */
+  markMoved(pileId: string): void;
   setTolerance(mm: number): void;
   setParametric(mode: ParametricMode): void;
   /** Test helpers: readings equal to the design, or to a randomly mis-set field. */
@@ -223,9 +225,17 @@ export const useProject = create<ProjectStore>()(
         },
 
         updateMeasurement: (id, patch) =>
-          set((s) => ({
-            fieldwork: { ...s.fieldwork, measurements: s.fieldwork.measurements.map((m) => (m.id === id ? { ...m, ...patch } : m)) },
-          })),
+          set((s) => {
+            // a fresh reading replaces the one taken before the pile moved
+            const measurements = s.fieldwork.measurements.map((m) =>
+              m.id !== id ? m : patch.reading != null ? { ...m, ...patch, previous: null } : { ...m, ...patch },
+            );
+            // a pile stops being "moved" once none of its readings wait to be re-measured
+            const moved = (s.fieldwork.moved ?? []).filter((p) =>
+              measurements.some((m) => (m.a === p || m.b === p) && m.reading == null && m.previous != null),
+            );
+            return { fieldwork: { ...s.fieldwork, measurements, moved } };
+          }),
 
         deleteMeasurement: (id) =>
           set((s) => ({ fieldwork: { ...s.fieldwork, measurements: s.fieldwork.measurements.filter((m) => m.id !== id) } })),
@@ -235,6 +245,17 @@ export const useProject = create<ProjectStore>()(
             fieldwork: {
               ...s.fieldwork,
               pinned: s.fieldwork.pinned.includes(id) ? s.fieldwork.pinned.filter((p) => p !== id) : [...s.fieldwork.pinned, id],
+            },
+          })),
+
+        markMoved: (pileId) =>
+          set((s) => ({
+            fieldwork: {
+              ...s.fieldwork,
+              moved: [...new Set([...(s.fieldwork.moved ?? []), pileId])],
+              measurements: s.fieldwork.measurements.map((m) =>
+                (m.a === pileId || m.b === pileId) && m.reading != null ? { ...m, previous: m.reading, reading: null } : m,
+              ),
             },
           })),
 

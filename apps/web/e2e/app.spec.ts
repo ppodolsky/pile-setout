@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 /** Opens `route` on a clean device (storage cleared, app started fresh). */
@@ -27,6 +28,25 @@ test.describe('field work', () => {
     const readings = await page.locator('[data-reading]').count();
     await page.reload();
     await expect(page.locator('[data-reading]')).toHaveCount(readings);
+  });
+
+  test('after moving a pile, its readings come back to be re-measured', async ({ page, isMobile }) => {
+    await fresh(page, '/piles/fieldwork');
+    await page.getByRole('button', { name: 'Demo errors' }).click();
+    if (isMobile) await page.getByRole('button', { name: 'Move plan' }).click();
+    await page.getByRole('button', { name: 'I moved it' }).first().click();
+    await page
+      .getByRole('button', { name: /Re-measure \d+ readings?/ })
+      .first()
+      .click();
+    // jumps to the Measure panel (phones) with the first reading to redo focused
+    const focused = page.locator('[data-reading]:focus');
+    await expect(focused).toBeVisible();
+    await expect(focused).toHaveAttribute('placeholder', /^was /);
+    await expect(page.getByText('Re-measure after moving')).toBeVisible();
+    if (isMobile) await expect(page.getByText(/design ≈ [\d,]+ mm/).first()).toBeVisible(); // pinned strip shows the pair
+    await focused.fill('5858');
+    await expect(page.locator('[data-reading]:focus')).toHaveValue('5858');
   });
 
   test('subtracts corrections at both ends and offers a pile’s previous one', async ({ page }) => {
@@ -170,6 +190,23 @@ test('keeps a library of named sketches', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Sketches…' }).click();
   await expect(page.getByLabel('This sketch')).toHaveValue('Garage');
   await expect(page.getByText('Shed')).toBeVisible();
+});
+
+test('exports DXF and opens it again as a new sketch', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'file round trip covered on desktop');
+  await fresh(page, '/piles/design');
+  await page.getByRole('button', { name: 'Project menu' }).click();
+  await page.getByRole('menuitem', { name: 'Export as' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /AutoCAD DXF/ }).click()]);
+  const path = await download.path();
+  // DXF keeps geometry only — the app says what was dropped
+  await expect(page.getByText(/constraint/i).first()).toBeVisible();
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.locator('input[type=file]').setInputFiles({ name: 'plan.dxf', mimeType: 'image/vnd.dxf', buffer: readFileSync(path) });
+  await expect(page.getByText('Piles (6)')).toBeVisible();
+  await page.getByRole('button', { name: 'Project menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sketches…' }).click();
+  await expect(page.getByLabel('This sketch')).toHaveValue('plan');
 });
 
 test('migrates a session saved by the first version', async ({ page }) => {

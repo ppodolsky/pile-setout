@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { MeasurementsCard } from './MeasurementsCard';
 import { MovePlanCard } from './MovePlanCard';
@@ -6,10 +5,12 @@ import { NextCard } from './NextCard';
 import { PlanCard } from './PlanCard';
 import { ResidualsCard } from './ResidualsCard';
 import { SettingsCard } from './SettingsCard';
+import { MeasuringStrip } from './MeasuringStrip';
+import { useFieldworkUi } from './ui';
 
 /** Field work: take the design to site — measure, see what to move, set out the rest. */
 export default function FieldworkMode() {
-  const [tab, setTab] = useState<'measure' | 'plan'>('measure');
+  const { tab, setTab } = useFieldworkUi();
   return (
     <div className="mx-auto max-w-[1600px] p-3 sm:p-5">
       {/* phones: switch between measuring and the plan; desktop shows both */}
@@ -28,6 +29,7 @@ export default function FieldworkMode() {
       </div>
       <div className="grid items-start gap-4 lg:grid-cols-[420px_minmax(0,1fr)]">
         <aside className={cn('flex flex-col gap-4', tab !== 'measure' && 'max-lg:hidden')}>
+          <MeasuringStrip />
           <NextCard />
           <MeasurementsCard />
           <SettingsCard />

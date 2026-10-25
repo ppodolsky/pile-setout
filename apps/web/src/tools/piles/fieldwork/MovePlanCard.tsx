@@ -1,6 +1,7 @@
-import { ChevronDown } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { fractionWords, needsMove, type Correction, type Pile, type Plan, type SetoutStep } from '@buildkit/pile-field';
+import { awaitsRemeasure, fractionWords, needsMove, type Correction, type Pile, type Plan, type SetoutStep } from '@buildkit/pile-field';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { fmt, plural, sfmt } from '@/lib/format';
@@ -9,7 +10,7 @@ import { MiniMap, MoveDiagram, StringDiagram, SwingDiagram } from '../drawing/ca
 import { pileLabel, useFieldwork } from '../model/derived';
 import { useCadEditor } from '@/cad';
 import { useProject } from '../model/store';
-import { sideNames } from './helpers';
+import { focusReading, sideNames } from './helpers';
 
 function Note({ tone = 'info', children }: { tone?: 'info' | 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
   return (
@@ -93,6 +94,8 @@ function MoveCard({
   tol: number;
 }) {
   const pinned = useProject((s) => s.fieldwork.pinned.includes(pile.id));
+  // stays "moved" (with its re-measure button) until its readings are taken again
+  const moved = useProject((s) => s.fieldwork.moved?.includes(pile.id) ?? false);
   const togglePin = useProject.getState().togglePin;
   const moving = c ? needsMove(c.offset, tol) : false;
   // sides are named after the measured piles at the field's edges (not a pile set out beyond them)
@@ -141,6 +144,7 @@ function MoveCard({
         <div className="py-6 text-center text-sm text-muted-foreground">no plan yet</div>
       )}
       {pile.shared && <div className="text-xs font-semibold text-primary">shared joint pile</div>}
+      {(moving || moved) && <MovedActions pileId={pile.id} />}
       <button
         className={cn(
           'mt-auto rounded-full border px-2 py-0.5 text-xs',
@@ -152,6 +156,33 @@ function MoveCard({
         {pinned ? 'pinned' : 'pin'}
       </button>
     </div>
+  );
+}
+
+/**
+ * After moving a pile on site: "I moved it" turns its readings into "to re-measure"; then a button
+ * jumps straight to them (switching to the Measure panel on phones).
+ */
+function MovedActions({ pileId }: { pileId: string }) {
+  const moved = useProject((s) => s.fieldwork.moved?.includes(pileId) ?? false);
+  const measurements = useProject((s) => s.fieldwork.measurements);
+  const waiting = measurements.filter((m) => (m.a === pileId || m.b === pileId) && awaitsRemeasure(m));
+  if (!moved)
+    return (
+      <Button size="sm" className="w-full" onClick={() => useProject.getState().markMoved(pileId)}>
+        <Check /> I moved it
+      </Button>
+    );
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="w-full border-warn/60 text-warn"
+      onClick={() => waiting[0] && focusReading(waiting[0].id)}
+      disabled={!waiting.length}
+    >
+      Re-measure {waiting.length} {plural(waiting.length, 'reading')} <ArrowRight />
+    </Button>
   );
 }
 

@@ -1,6 +1,6 @@
 import { Plus, X } from 'lucide-react';
 import { distance } from '@buildkit/geometry';
-import { correctedLength, knownCorrection, type Measurement, type Pile } from '@buildkit/pile-field';
+import { awaitsRemeasure, correctedLength, knownCorrection, type Measurement, type Pile } from '@buildkit/pile-field';
 import { NativeSelect } from '@/components/native-select';
 import { NumberInput } from '@/components/number-input';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,9 @@ import { fmt, sfmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useFieldwork } from '../model/derived';
 import { useProject } from '../model/store';
+import { MiniMap } from '../drawing/cards';
 import { focusReading } from './helpers';
+import { useFieldworkUi } from './ui';
 
 function deltaClass(d: number, tol: number) {
   return Math.abs(d) <= tol ? 'text-ok' : Math.abs(d) <= 3 * tol ? 'text-warn' : 'text-err';
@@ -59,9 +61,15 @@ function Row({ m, piles, unused, tol }: { m: Measurement; piles: readonly Pile[]
       {p.label}
     </option>
   ));
+  const stale = awaitsRemeasure(m);
+  const setFocused = useFieldworkUi((s) => s.setFocused);
   return (
     <li
-      className={cn('border-b py-2.5 first:pt-0 last:border-0', unused && 'opacity-45')}
+      className={cn(
+        'border-b py-2.5 first:pt-0 last:border-0',
+        unused && 'opacity-45',
+        stale && '-mx-2 rounded-md border-warn/50 bg-warn/8 px-2',
+      )}
       title={unused ? 'Not used: this pile is set out from its references (switch parametric piles to “Measure” to use it)' : undefined}
     >
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)_3.2rem_1.5rem] items-center gap-1.5">
@@ -77,8 +85,9 @@ function Row({ m, piles, unused, tol }: { m: Measurement; piles: readonly Pile[]
           allowEmpty
           min={0}
           digits={1}
-          placeholder="reading"
+          placeholder={stale ? `was ${Math.round(m.previous!)}` : 'reading'}
           aria-label="Tape reading, mm"
+          onFocus={() => setFocused(m.id)}
           onValue={(reading) => updateMeasurement(m.id, { reading })}
         />
         <span className={cn('text-right font-mono text-xs', delta != null && deltaClass(delta, tol))}>
@@ -93,6 +102,8 @@ function Row({ m, piles, unused, tol }: { m: Measurement; piles: readonly Pile[]
         </button>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <MiniMap piles={piles} highlight={[m.a, m.b]} line={[m.a, m.b]} width={52} className="shrink-0" />
+        {stale && <span className="font-semibold text-warn">re-measure</span>}
         <span className="hidden sm:inline">Corrections</span>
         <CorrectionField m={m} end="A" pile={a} />
         <CorrectionField m={m} end="B" pile={b} />
