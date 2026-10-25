@@ -16,6 +16,11 @@ export interface ViewportProps {
   /** Pointer position over the canvas, in world coordinates (null when it leaves). */
   readonly onPointerWorld?: (p: Vec2 | null) => void;
   readonly cursor?: string;
+  /**
+   * Box selection with the mouse: dragging empty space reports a world rectangle (pan then uses the
+   * middle/right button, Space + drag, or touch). `done` on release; `additive` with Shift.
+   */
+  readonly onBox?: (box: { a: Vec2; b: Vec2 }, done: boolean, additive: boolean) => void;
   /** Extra controls shown in the top-right corner next to "Fit". */
   readonly controls?: ReactNode;
   readonly label: string;
@@ -33,6 +38,7 @@ export function Viewport({
   children,
   onBackgroundClick,
   onPointerWorld,
+  onBox,
   cursor,
   controls,
   label,
@@ -71,9 +77,29 @@ export function Viewport({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // drag to pan, two fingers to pinch; a press without movement is a click
+  // Space held → pan with the primary button even where it would box-select
+  const space = useRef(false);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement)) space.current = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') space.current = false;
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  // drag to pan (or box-select), two fingers to pinch; a press without movement is a click
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ moved: boolean; start: View; x: number; y: number; dist?: number } | null>(null);
+  const gesture = useRef<{ mode: 'pan' | 'box'; moved: boolean; start: View; x: number; y: number; dist?: number; shift: boolean } | null>(
+    null,
+  );
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const local = (e: React.PointerEvent) => {
     const r = host.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -87,13 +113,19 @@ export function Viewport({
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current = {
+        mode: 'pan',
         moved: true,
         start: viewRef.current,
         x: (a!.x + b!.x) / 2,
         y: (a!.y + b!.y) / 2,
         dist: Math.hypot(a!.x - b!.x, a!.y - b!.y),
+        shift: false,
       };
-    } else gesture.current = { moved: false, start: viewRef.current, x: p.x, y: p.y };
+      setBox(null);
+    } else {
+      const boxing = !!onBox && e.pointerType === 'mouse' && e.button === 0 && !space.current;
+      gesture.current = { mode: boxing ? 'box' : 'pan', moved: false, start: viewRef.current, x: p.x, y: p.y, shift: e.shiftKey };
+    }
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const p = local(e);
@@ -114,6 +146,11 @@ export function Viewport({
     const dy = p.y - g.y;
     if (!g.moved && Math.hypot(dx, dy) < 4) return;
     g.moved = true;
+    if (g.mode === 'box') {
+      setBox({ x0: g.x, y0: g.y, x1: p.x, y1: p.y });
+      onBox?.({ a: toWorld(g.start, g.x, g.y), b: toWorld(g.start, p.x, p.y) }, false, g.shift);
+      return;
+    }
     setManual({ ...g.start, tx: g.start.tx + dx, ty: g.start.ty + dy });
   };
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -121,10 +158,13 @@ export function Viewport({
     pointers.current.delete(e.pointerId);
     if (pointers.current.size) return;
     gesture.current = null;
-    if (g && !g.moved) {
-      const p = local(e);
-      onBackgroundClick?.(toWorld(viewRef.current, p.x, p.y), viewRef.current);
+    const p = local(e);
+    if (g?.mode === 'box' && g.moved) {
+      setBox(null);
+      onBox?.({ a: toWorld(g.start, g.x, g.y), b: toWorld(g.start, p.x, p.y) }, true, g.shift);
+      return;
     }
+    if (g && !g.moved) onBackgroundClick?.(toWorld(viewRef.current, p.x, p.y), viewRef.current);
   };
 
   return (
@@ -142,8 +182,21 @@ export function Viewport({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onPointerLeave={() => onPointerWorld?.(null)}
+          onContextMenu={(e) => e.preventDefault()}
         >
           <ViewContext.Provider value={view}>{children}</ViewContext.Provider>
+          {box && (
+            <rect
+              x={Math.min(box.x0, box.x1)}
+              y={Math.min(box.y0, box.y1)}
+              width={Math.abs(box.x1 - box.x0)}
+              height={Math.abs(box.y1 - box.y0)}
+              fill="color-mix(in oklch, var(--draw-select) 12%, transparent)"
+              stroke="var(--draw-select)"
+              strokeDasharray="4 3"
+              pointerEvents="none"
+            />
+          )}
         </svg>
       )}
       <div className="absolute top-2 right-2 flex gap-1">

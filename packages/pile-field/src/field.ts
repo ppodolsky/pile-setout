@@ -1,5 +1,6 @@
+import type { Constraint } from '@buildkit/sketch';
 import { CONTAINER_WIDTH, CONTAINERS, type ContainerType } from './containers';
-import type { PileSpec } from './design';
+import type { Pile, PileDesign } from './design';
 
 export interface ContainerOutline {
   readonly type: ContainerType;
@@ -30,15 +31,19 @@ export function containerOutlines(containers: readonly ContainerType[]): Contain
 }
 
 /**
- * Generates the pile design for containers joined end to end (short sides touching).
- * Corner piles are fixed `inset + head/2` in from the end and from the long side; every joint has
- * ONE shared fixed pile on the joint line; intermediate supports are parametric — between the
- * container's two end piles of the same row (20′: the middle; 40′: at their distance from the corner).
+ * Generates a fully constrained pile sketch for containers joined end to end (short sides
+ * touching): corner piles `inset + head/2` in from the end and the long side, ONE shared pile per
+ * joint, intermediate supports on the line between their container's end piles.
+ *
+ * Constraints: the first pile is fixed; along the bottom row each next corner/joint pile is
+ * horizontal with the previous one at its ΔX; every top pile is vertical above its bottom pile at
+ * ΔY; intermediate supports are the midpoint (20′) or at their ΔX from the corner on the line (40′).
+ * Intermediate supports are set out from their corners in field work.
  */
-export function generatePiles({ containers, head, inset }: TemplateSpec): PileSpec[] {
+export function generateDesign({ containers, head, inset }: TemplateSpec): PileDesign {
   const e = inset + head / 2;
   const rows = [e, CONTAINER_WIDTH - e];
-  type Col = { x: number; shared?: boolean; mid?: { xs: number; xe: number; ratio?: number } };
+  type Col = { x: number; shared?: boolean; mid?: { xs: number; xe: number } };
   const cols: Col[] = [];
   let x0 = 0;
   containers.forEach((type, k) => {
@@ -47,36 +52,52 @@ export function generatePiles({ containers, head, inset }: TemplateSpec): PileSp
     const xs = k === 0 ? e : x0;
     const xe = hasNext ? x0 + c.length : x0 + c.length - e;
     if (k === 0) cols.push({ x: e });
-    for (const m of c.mids) {
-      const x = x0 + m;
-      // the middle of its two end piles → ratio 0.5; otherwise its distance from the first corner
-      cols.push({ x, mid: { xs, xe, ...(Math.abs(2 * x - xs - xe) < 1e-9 ? { ratio: 0.5 } : {}) } });
-    }
+    for (const m of c.mids) cols.push({ x: x0 + m, mid: { xs, xe } });
     cols.push(hasNext ? { x: x0 + c.length, shared: true } : { x: x0 + c.length - e });
     x0 += c.length;
   });
   cols.sort((a, b) => a.x - b.x);
   const n = cols.length;
   const id = (row: number, col: number) => `p${row * n + col + 1}`;
-  const colOf = (x: number) => cols.findIndex((c) => c.x === x && !c.mid);
-  const specs: PileSpec[] = [];
+  const piles: Pile[] = [];
   rows.forEach((y, r) =>
-    cols.forEach((col, ci) => {
-      const base = { id: id(r, ci), label: `C${r * n + ci + 1}`, ...(col.shared ? { shared: true } : {}) };
-      if (!col.mid) {
-        specs.push({ ...base, def: { kind: 'fixed', x: col.x, y } });
-        return;
-      }
-      const from = id(r, colOf(col.mid.xs));
-      const to = id(r, colOf(col.mid.xe));
-      specs.push({
-        ...base,
-        def:
-          col.mid.ratio != null
-            ? { kind: 'between', from, to, by: 'ratio', t: col.mid.ratio }
-            : { kind: 'between', from, to, by: 'distance', distance: col.x - col.mid.xs },
-      });
-    }),
+    cols.forEach((col, ci) =>
+      piles.push({
+        id: id(r, ci),
+        label: `C${r * n + ci + 1}`,
+        x: col.x,
+        y,
+        setout: col.mid ? 'derive' : 'measure',
+        ...(col.shared ? { shared: true } : {}),
+      }),
+    ),
   );
-  return specs;
+
+  const constraints: Constraint[] = [];
+  let k = 0;
+  const cid = () => `k${++k}`;
+  const main = cols.map((c, i) => ({ c, i })).filter(({ c }) => !c.mid);
+  const colOf = (x: number) => cols.findIndex((c) => c.x === x && !c.mid);
+  constraints.push({ id: cid(), kind: 'fix', p: id(0, main[0]!.i), x: main[0]!.c.x, y: rows[0]! });
+  for (let j = 1; j < main.length; j++) {
+    const a = id(0, main[j - 1]!.i);
+    const b = id(0, main[j]!.i);
+    constraints.push({ id: cid(), kind: 'horizontal', a, b }, { id: cid(), kind: 'dx', a, b, d: main[j]!.c.x - main[j - 1]!.c.x });
+  }
+  for (const { i } of main)
+    constraints.push(
+      { id: cid(), kind: 'vertical', a: id(0, i), b: id(1, i) },
+      { id: cid(), kind: 'dy', a: id(0, i), b: id(1, i), d: rows[1]! - rows[0]! },
+    );
+  cols.forEach((col, ci) => {
+    if (!col.mid) return;
+    for (const r of [0, 1]) {
+      const a = id(r, colOf(col.mid.xs));
+      const b = id(r, colOf(col.mid.xe));
+      const p = id(r, ci);
+      if (Math.abs(2 * col.x - col.mid.xs - col.mid.xe) < 1e-9) constraints.push({ id: cid(), kind: 'ratio', p, a, b, t: 0.5 });
+      else constraints.push({ id: cid(), kind: 'onLine', p, a, b }, { id: cid(), kind: 'dx', a, b: p, d: col.x - col.mid.xs });
+    }
+  });
+  return { piles, constraints };
 }

@@ -19,7 +19,8 @@ export function TemplateCard() {
       <CardHeader className="px-4">
         <CardTitle>Container template</CardTitle>
         <CardDescription>
-          Containers joined end to end. Each joint sits on one shared pile; intermediate supports are parametric (set from the corners).
+          Containers joined end to end. Generates a fully constrained sketch: each joint on one shared pile, intermediate supports set out
+          from their corners.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-4">

@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { fmt } from '@/lib/format';
-import { Containers, Dependencies, PileHead, PileMark } from '../drawing/layers';
+import { SetoutLines } from '../drawing/constraints';
+import { Containers, PileHead, PileMark } from '../drawing/layers';
 import { useFieldwork, useOutlines } from '../model/derived';
 import { useEditor } from '../model/editor';
 import { useProject } from '../model/store';
@@ -14,7 +15,7 @@ import { useProject } from '../model/store';
 /** The field as measured: actual stakes, arrows to their design positions, move order. */
 function PlanLayers() {
   const v = useView();
-  const { plan, piles } = useFieldwork();
+  const { plan, piles, setout } = useFieldwork();
   const outlines = useOutlines();
   const head = useProject((s) => s.design.template.head);
   const { exaggeration, showLines } = useProject((s) => s.view);
@@ -41,7 +42,7 @@ function PlanLayers() {
           })}
         </g>
       )}
-      <Dependencies piles={piles} frame={frame} only={derived} />
+      <SetoutLines steps={setout} map={map} />
       {piles.map((p: Pile) => {
         const isDerived = derived.has(p.id);
         const design = map(p);

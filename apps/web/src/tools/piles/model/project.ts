@@ -1,10 +1,11 @@
-import { generatePiles, type Measurement, type ParametricMode, type PileSpec, type TemplateSpec } from '@buildkit/pile-field';
+import { generateDesign, type Constraint, type Measurement, type ParametricMode, type Pile, type TemplateSpec } from './deps';
 
-/** Design: the container template and the pile plan generated from it (and edited by hand). */
+/** Design: the container template and the pile sketch (piles + constraints) built from it. */
 export interface DesignState {
   readonly template: TemplateSpec;
-  readonly piles: readonly PileSpec[];
-  /** Piles were edited by hand: template changes no longer regenerate them automatically. */
+  readonly piles: readonly Pile[];
+  readonly constraints: readonly Constraint[];
+  /** Edited by hand: template changes no longer regenerate the sketch automatically. */
   readonly edited: boolean;
 }
 
@@ -14,6 +15,7 @@ export interface FieldworkState {
   /** Allowed offset of a pile from its design position, mm. */
   readonly tolerance: number;
   readonly pinned: readonly string[];
+  /** Piles marked "set out from neighbours": set out after the others, or measured too. */
   readonly parametric: ParametricMode;
 }
 
@@ -21,6 +23,8 @@ export interface ViewState {
   /** Arrows on the field plan are drawn this many times longer than the real offset. */
   readonly exaggeration: number;
   readonly showLines: boolean;
+  /** Show constraint glyphs on the design drawing. */
+  readonly showConstraints: boolean;
 }
 
 export interface ProjectData {
@@ -31,10 +35,14 @@ export interface ProjectData {
 
 export const DEFAULT_TEMPLATE: TemplateSpec = { containers: ['20'], head: 200, inset: 0 };
 
+export function designFromTemplate(template: TemplateSpec): DesignState {
+  return { template, ...generateDesign(template), edited: false };
+}
+
 export function newProject(): ProjectData {
   return {
-    design: { template: DEFAULT_TEMPLATE, piles: generatePiles(DEFAULT_TEMPLATE), edited: false },
+    design: designFromTemplate(DEFAULT_TEMPLATE),
     fieldwork: { measurements: [], tolerance: 3, pinned: [], parametric: 'derived' },
-    view: { exaggeration: 10, showLines: true },
+    view: { exaggeration: 10, showLines: true, showConstraints: true },
   };
 }

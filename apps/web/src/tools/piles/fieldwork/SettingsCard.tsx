@@ -6,13 +6,13 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useFieldwork } from '../model/derived';
 import { useProject } from '../model/store';
 
-/** Tolerance, how parametric piles are handled, and test helpers. */
+/** Tolerance, how set-out piles are handled, and test helpers. */
 export function SettingsCard() {
   const fw = useProject((s) => s.fieldwork);
   const { plan, piles } = useFieldwork();
   const { setTolerance, setParametric, fillDesignReadings, fillDemoReadings } = useProject.getState();
-  const params = piles.filter((p) => p.def.kind !== 'fixed').length;
-  const fixed = piles.length - params;
+  const params = piles.filter((p) => p.setout === 'derive').length;
+  const measuredCount = piles.length - params;
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
@@ -25,7 +25,7 @@ export function SettingsCard() {
         </div>
         {params > 0 && (
           <div className="space-y-1.5">
-            <Label>Parametric piles ({params})</Label>
+            <Label>Piles set out from neighbours ({params})</Label>
             <ToggleGroup
               type="single"
               variant="outline"
@@ -34,7 +34,7 @@ export function SettingsCard() {
               onValueChange={(v) => v && setParametric(v as 'derived' | 'measured')}
             >
               <ToggleGroupItem value="derived" className="flex-1 text-xs">
-                Set from references
+                Set out after
               </ToggleGroupItem>
               <ToggleGroupItem value="measured" className="flex-1 text-xs">
                 Measure
@@ -42,8 +42,8 @@ export function SettingsCard() {
             </ToggleGroup>
             <p className="text-xs text-muted-foreground">
               {fw.parametric === 'derived'
-                ? `Only the ${fixed} fixed piles are measured and corrected (${Math.max(0, 2 * fixed - 3)} measurements minimum); parametric piles are then set out from their corrected references.`
-                : `Every pile is measured and corrected on its own (${Math.max(0, 2 * piles.length - 3)} minimum) — also catches a parametric stake that is off.`}
+                ? `Only the other ${measuredCount} piles are measured and corrected (${Math.max(0, 2 * measuredCount - 3)} measurements minimum); these are set out afterwards from piles already in place.`
+                : `Every pile is measured and corrected on its own (${Math.max(0, 2 * piles.length - 3)} minimum) — also catches a set-out stake that is off.`}
             </p>
           </div>
         )}

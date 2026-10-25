@@ -59,39 +59,66 @@ test.describe('field work', () => {
   });
 });
 
-test.describe('design', () => {
-  test('adds a fixed pile, makes it parametric, undoes', async ({ page, isMobile }) => {
-    test.skip(isMobile, 'pointer placement is covered on desktop');
+test.describe('design (constraint sketch)', () => {
+  test('template is a fully constrained sketch', async ({ page }) => {
     await fresh(page, '/piles/design');
-    await expect(page.getByText('Piles (6)')).toBeVisible();
-
-    await page.getByRole('radio', { name: 'Fixed pile' }).click();
-    const canvas = page.getByRole('img', { name: 'Pile design' });
-    await expect(canvas.getByText('C1', { exact: true })).toBeVisible(); // drawn and fitted
-    const box = (await canvas.boundingBox())!;
-    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.12);
-    await expect(page.getByText('Piles (7)')).toBeVisible();
-    await expect(page.getByText('Pile C7')).toBeVisible();
-
-    await page.getByRole('radio', { name: 'Distance + angle', exact: true }).click();
-    await expect(page.getByText('Angle measured from')).toBeVisible();
-
-    // field work sets it out from its references with two tapes
-    await page.getByRole('link', { name: 'Field work' }).click();
-    await page.getByRole('button', { name: 'Demo errors' }).click();
-    await expect(page.getByText('Swing two tapes').first()).toBeVisible();
-
-    await page.getByRole('link', { name: 'Design' }).click();
-    await page.keyboard.press('Control+z');
-    await page.keyboard.press('Control+z');
-    await expect(page.getByText('Piles (6)')).toBeVisible();
-  });
-
-  test('template generates shared joint piles', async ({ page }) => {
-    await fresh(page, '/piles/design');
+    await expect(page.getByText('fully constrained').first()).toBeVisible();
     await page.getByRole('button', { name: "10'" }).first().click();
     await expect(page.getByText('Piles (8)')).toBeVisible();
     await noHorizontalOverflow(page);
+  });
+
+  test('a new pile constrained to another by distance + angle', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'pointer placement is covered on desktop');
+    await fresh(page, '/piles/design');
+    const canvas = page.getByRole('img', { name: 'Pile design' });
+    await expect(canvas.getByText('C1', { exact: true })).toBeVisible();
+    await page.getByRole('radio', { name: 'New pile' }).click();
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.1);
+    await expect(page.getByText('Pile C7')).toBeVisible();
+    await expect(page.getByText('can still move')).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Select & move' }).click();
+    await page.locator('[data-pile="C6"]').click({ modifiers: ['Shift'] });
+    await expect(page.getByText('2 piles', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Distance + angle' }).click();
+    await expect(page.getByText('2 constraints between them')).toBeVisible();
+
+    await page.locator('[data-pile="C7"]').click();
+    await expect(page.getByText('fully constrained').first()).toBeVisible();
+  });
+
+  test('editing a dimension moves the piles that depend on it; undo restores', async ({ page }) => {
+    await fresh(page, '/piles/design');
+    await page.getByText('ΔX 5,858').click();
+    const value = page.getByLabel('ΔX value');
+    await value.fill('6000');
+    await expect(page.getByText('6,100, 100')).toBeVisible(); // C3 moved
+    await expect(page.getByText('3,100, 100')).toBeVisible(); // C2 stays the midpoint
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByText('5,958, 100')).toBeVisible();
+  });
+
+  test('multi-select toggle picks several piles without a keyboard', async ({ page }) => {
+    await fresh(page, '/piles/design');
+    await page.getByRole('button', { name: 'Multi-select' }).click();
+    await page.locator('[data-pile="C1"]').click();
+    await page.locator('[data-pile="C4"]').click();
+    await expect(page.getByText('2 piles', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New pile in the middle' })).toBeVisible();
+  });
+
+  test('a midpoint pile is set out on the string in field work', async ({ page }) => {
+    await fresh(page, '/piles/design');
+    await page.getByRole('button', { name: /^C1\b/ }).click();
+    await page.getByRole('button', { name: /^C4\b/ }).click({ modifiers: ['Shift'] });
+    await page.getByRole('button', { name: 'New pile in the middle' }).click();
+    await expect(page.getByText('Piles (7)')).toBeVisible();
+    await page.getByRole('link', { name: 'Field work' }).click();
+    await page.getByRole('button', { name: 'Demo errors' }).click();
+    if ((page.viewportSize()?.width ?? 1000) < 1024) await page.getByRole('button', { name: 'Move plan' }).click();
+    await expect(page.getByText('C1 → C4').first()).toBeVisible();
   });
 });
 

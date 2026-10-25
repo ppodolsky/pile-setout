@@ -45,7 +45,7 @@ export function ProjectMenu() {
       if (d?.kind !== FILE_KIND || !d.design?.piles || !d.fieldwork?.measurements) throw new Error('not a pile field project');
       useProject.setState({ design: d.design, fieldwork: d.fieldwork, ...(d.view ? { view: d.view } : {}) });
       useProject.temporal.getState().clear();
-      useEditor.getState().select(null);
+      useEditor.getState().select([]);
     } catch (e) {
       alert(`Could not open this file: ${(e as Error).message}`);
     }
@@ -92,7 +92,7 @@ export function ProjectMenu() {
             <AlertDialogAction
               onClick={() => {
                 useProject.getState().reset();
-                useEditor.getState().select(null);
+                useEditor.getState().select([]);
               }}
             >
               New project

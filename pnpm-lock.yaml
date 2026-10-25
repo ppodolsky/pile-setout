@@ -47,6 +47,9 @@ importers:
       '@buildkit/pile-field':
         specifier: workspace:*
         version: link:../../packages/pile-field
+      '@buildkit/sketch':
+        specifier: workspace:*
+        version: link:../../packages/sketch
       '@buildkit/survey':
         specifier: workspace:*
         version: link:../../packages/survey
@@ -131,9 +134,18 @@ importers:
       '@buildkit/geometry':
         specifier: workspace:*
         version: link:../geometry
+      '@buildkit/sketch':
+        specifier: workspace:*
+        version: link:../sketch
       '@buildkit/survey':
         specifier: workspace:*
         version: link:../survey
+
+  packages/sketch:
+    dependencies:
+      '@buildkit/geometry':
+        specifier: workspace:*
+        version: link:../geometry
 
   packages/survey:
     dependencies:

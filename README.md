@@ -1,8 +1,8 @@
 # Buildkit
 
 Browser tools for building sites — starting with **Pile field**: design the pile plan under shipping
-containers (CAD-style, fixed and parametric piles), then take it to site and set it out with a tape
-(what to measure next, which piles to move and where, minimal move plans, misread detection).
+containers as a CAD sketch (piles + geometric constraints), then take it to site and set it out with a
+tape (what to measure next, which piles to move and where, minimal move plans, misread detection).
 
 Live: https://ppodolsky.github.io/pile-setout/ · works offline once opened (installable PWA).
 
@@ -24,11 +24,13 @@ Local browser tests can use an installed Google Chrome: `PW_CHANNEL=chrome pnpm 
 ```
 packages/                     framework-free TypeScript, unit-tested (Vitest)
   geometry/                   vectors, rigid transforms, small dense linear algebra
+  sketch/                     2D geometric constraint solver (CAD sketch): fix, distance, ΔX/ΔY,
+                              horizontal/vertical, angle, ratio, on-line; DOF + conflicts
   survey/                     distance networks: least-squares adjustment, rigidity,
                               blunder detection (data snooping), next-measurement advisor
-  pile-field/                 the pile-field domain: container catalog (ISO 668), parametric
-                              pile designs, template generator, measurements, minimal-moves
-                              placement search, plan pipeline, set-out instructions
+  pile-field/                 the pile-field domain: container catalog (ISO 668), pile sketches and
+                              the template generator, measurements, minimal-moves placement
+                              search, plan pipeline, ordered set-out instructions
 apps/web/                     the React app
   src/app/                    shell, routing, theme, tool registry
   src/components/ui/          shadcn/ui components (Radix + Tailwind) — generated, keep as is
@@ -47,8 +49,8 @@ apps/web/                     the React app
 - `packages/*` never import React, Zustand or app code (enforced by ESLint). Everything that
   computes is a pure function over plain data — easy to test, and ready to move into a Web Worker
   if it ever gets heavy.
-- `geometry` ← `survey` ← `pile-field` ← `apps/web`. New tools reuse `geometry`/`survey` and add
-  their own domain package.
+- `geometry` ← `sketch`, `survey` ← `pile-field` ← `apps/web`. New tools reuse `geometry`, `sketch`
+  and `survey` and add their own domain package.
 - Inside the app, a tool talks to the shell only through its `ToolDescriptor` (`app/registry.ts`).
 
 ## Conventions
@@ -63,16 +65,19 @@ apps/web/                     the React app
 
 ## Domain model (pile field)
 
-- **Design** — `PileSpec { id, label, def }` where `def` is
-  `fixed {x, y}` · `between {from, to, by: ratio|distance}` · `polar {from, distance, angle, ref?}`.
-  `resolveDesign()` evaluates definitions in dependency order and reports cycles / missing
-  references. `generatePiles()` builds a design from containers joined end to end (shared joint
-  piles; intermediate supports are parametric).
+- **Design** — a sketch: `piles` (points with a stable `id`, a `label`, a solved position and a
+  field-work role `measure | derive`) plus `constraints` (`@buildkit/sketch`). `solveSketch()` is a
+  Levenberg–Marquardt solver from the current positions with per-coordinate damping (free
+  directions don't move; dragging pulls a point as far as constraints allow); it reports DOF, fully
+  determined points and conflicting constraints. Stored positions are always the solved ones.
+  `generateDesign()` builds a fully constrained sketch from containers joined end to end.
 - **Field work** — `Measurement { a, b, reading, correctionA, correctionB }` (corrections: fixed
   extra tape length at either end, subtracted). `computePlan()` = adjustment → rigidity check →
   blunder test → minimal-moves rigid placement (proven by branch-and-bound) → move order.
-  Parametric piles can be measured, or set out from their references (`setoutInstruction()`:
-  along a string, or by swinging two tapes). `suggestNext()` picks the most useful next pair.
+  Piles marked `derive` are either measured too, or set out afterwards (`setoutPlan()`): in an order
+  where each uses only piles already in place — on the string between the two piles it lies between,
+  or by swinging two tapes from its constraint partners / nearest placed piles. `suggestNext()` picks
+  the most useful next pair to measure.
 
 ## State
 
@@ -85,6 +90,9 @@ opened from a JSON file.
 
 ## Adding things
 
+- **A new constraint type:** add it to `packages/sketch/src/constraints.ts` (residuals + points), a
+  glyph in `tools/piles/drawing/constraints.tsx`, metadata in `design/meta.ts`, and a selection
+  action in `model/actions.ts` if it is created from a selection.
 - **A new mode for the pile tool:** add a component under `tools/piles/<mode>/` and an entry in
   `tools/piles/index.ts` → it gets a route (`#/piles/<mode>`) and a tab in the top bar.
 - **A new tool:** create `tools/<tool>/index.ts` exporting a `ToolDescriptor` (modes are lazily

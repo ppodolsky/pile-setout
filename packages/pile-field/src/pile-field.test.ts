@@ -1,26 +1,28 @@
 import { describe, expect, it } from 'vitest';
+import type { Constraint } from '@buildkit/sketch';
 import {
   CASTING,
   computePlan,
   correctedLength,
-  generatePiles,
-  isDerived,
+  generateDesign,
   knownCorrection,
   readings,
   recommendedPairs,
-  resolveDesign,
   rng,
   scatter,
-  setoutInstruction,
+  setoutPlan,
+  solveDesign,
   suggestNext,
   type ContainerType,
   type Measurement,
   type ParametricMode,
   type Pile,
-  type PileSpec,
 } from './index';
 
-const build = (containers: ContainerType[], head = 200, inset = 0) => resolveDesign(generatePiles({ containers, head, inset }));
+const build = (containers: ContainerType[], head = 200, inset = 0) => {
+  const design = generateDesign({ containers, head, inset });
+  return { ...design, ...solveDesign(design) };
+};
 const field20 = (head = 200, inset = 0) => build(['20'], head, inset);
 let seq = 0;
 const meas = (
@@ -57,7 +59,7 @@ function followAdvisor(piles: Pile[], parametric: ParametricMode, seed = 11) {
   return { kinds, ms, actual };
 }
 
-describe('generatePiles', () => {
+describe('generateDesign', () => {
   it('puts flush 200 mm heads 100 mm from the edges of a 20′', () => {
     const { piles } = field20();
     expect(piles.map((p) => [p.label, p.x, p.y])).toEqual([
@@ -70,6 +72,15 @@ describe('generatePiles', () => {
     ]);
   });
 
+  it('is a fully constrained sketch', () => {
+    for (const c of [['10'], ['20'], ['40'], ['10', '20', '40']] as ContainerType[][]) {
+      const { status, piles } = build(c);
+      expect(status.conflicts.size).toBe(0);
+      expect(status.dof).toBe(0);
+      expect(status.determined.size).toBe(piles.length);
+    }
+  });
+
   it('honours head size and inset', () => {
     const { piles } = field20(300, 50);
     expect(piles[0]).toMatchObject({ x: 200, y: 200 });
@@ -79,28 +90,44 @@ describe('generatePiles', () => {
   it('shares one pile per joint in a combination', () => {
     const { piles } = build(['10', '20']);
     expect(piles).toHaveLength(8);
-    const joint = piles.filter((p) => p.shared);
-    expect(joint.map((p) => p.x)).toEqual([2991, 2991]);
+    expect(piles.filter((p) => p.shared).map((p) => p.x)).toEqual([2991, 2991]);
     // the 20′ middle support stays at 3029 from its own start even though its end piles are asymmetric
-    expect(piles.find((p) => p.label === 'C3')).toMatchObject({ x: 2991 + 3029 });
-    expect(piles.find((p) => p.label === 'C3')!.def).toMatchObject({ kind: 'between', by: 'distance' });
+    expect(piles.find((p) => p.label === 'C3')!.x).toBeCloseTo(2991 + 3029, 6);
+  });
+
+  it('places 40′ intermediates at their distance from the corner', () => {
+    const { piles } = build(['40']);
+    expect(piles.filter((p) => p.setout === 'derive').map((p) => Math.round(p.x))).toEqual([3048, 9144, 3048, 9144]);
   });
 
   it('keeps corner castings on the heads', () => {
-    const { piles } = field20();
-    const c1 = piles[0]!;
-    // casting aperture centre (102.5, 89.5) lies inside the 200 mm head centred at (100, 100)
+    const c1 = field20().piles[0]!;
     expect(Math.abs(c1.x - 102.5)).toBeLessThan(100);
     expect(Math.abs(c1.y - CASTING.sideOffset)).toBeLessThan(100);
   });
 
-  it('makes middle supports parametric and tells how to set them out', () => {
-    const { piles } = field20();
-    const c2 = piles[1]!;
-    expect(c2.def).toMatchObject({ kind: 'between', by: 'ratio', t: 0.5 });
-    expect(isDerived(c2, piles, 'derived')).toBe(true);
-    expect(isDerived(c2, piles, 'measured')).toBe(false);
-    const ins = setoutInstruction(c2, piles)!;
+  it('follows its constraints when a dimension changes', () => {
+    const d = generateDesign({ containers: ['20'], head: 200, inset: 0 });
+    const dx = d.constraints.find((c) => c.kind === 'dx')!;
+    const edited = { ...d, constraints: d.constraints.map((c) => (c.id === dx.id ? { ...c, d: 6000 } : c)) as Constraint[] };
+    const { piles } = solveDesign(edited);
+    const at = (l: string) => piles.find((p) => p.label === l)!;
+    expect(at('C3').x).toBeCloseTo(6100, 6);
+    expect(at('C6').x).toBeCloseTo(6100, 6); // vertical above C3
+    expect(at('C2').x).toBeCloseTo(3100, 6); // stays the midpoint
+  });
+});
+
+describe('set-out of derived piles', () => {
+  it('sets middle supports on the string between corrected corners', () => {
+    const { piles, constraints } = field20();
+    const steps = setoutPlan(
+      piles.filter((p) => p.setout === 'derive'),
+      piles.filter((p) => p.setout === 'measure'),
+      constraints,
+    );
+    expect(steps).toHaveLength(2);
+    const ins = steps[0]!.instruction!;
     expect(ins.kind).toBe('string');
     if (ins.kind === 'string') {
       expect(ins.from.label).toBe('C1');
@@ -109,56 +136,31 @@ describe('generatePiles', () => {
     }
   });
 
-  it('places 40′ intermediates at their distance from the corner', () => {
-    const { piles } = build(['40']);
-    expect(piles.filter((p) => p.def.kind === 'between').map((p) => p.x)).toEqual([3048, 9144, 3048, 9144]);
-  });
-});
-
-describe('parametric design', () => {
-  const specs: PileSpec[] = [
-    { id: 'a', label: 'A', def: { kind: 'fixed', x: 0, y: 0 } },
-    { id: 'b', label: 'B', def: { kind: 'fixed', x: 4000, y: 0 } },
-    { id: 'm', label: 'M', def: { kind: 'between', from: 'a', to: 'b', by: 'ratio', t: 0.25 } },
-    { id: 'p', label: 'P', def: { kind: 'polar', from: 'a', distance: 1000, angle: 90, ref: 'b' } },
-    { id: 'q', label: 'Q', def: { kind: 'polar', from: 'm', distance: 500, angle: 0, ref: null } },
-  ];
-
-  it('resolves between and polar definitions, in dependency order', () => {
-    const r = resolveDesign(specs);
-    const at = (id: string) => r.piles.find((p) => p.id === id)!;
-    expect(at('m')).toMatchObject({ x: 1000, y: 0 });
-    expect(at('p').x).toBeCloseTo(0);
-    expect(at('p').y).toBeCloseTo(1000); // 90° counter-clockwise from a → b (+X) is +Y
-    expect(at('q')).toMatchObject({ x: 1500, y: 0 });
-    expect(r.order.indexOf('m')).toBeLessThan(r.order.indexOf('q'));
-  });
-
-  it('reports cycles and missing references', () => {
-    const r = resolveDesign([
-      { id: 'x', label: 'X', def: { kind: 'polar', from: 'y', distance: 1, angle: 0, ref: null } },
-      { id: 'y', label: 'Y', def: { kind: 'polar', from: 'x', distance: 1, angle: 0, ref: null } },
-      { id: 'z', label: 'Z', def: { kind: 'between', from: 'x', to: 'nope', by: 'ratio', t: 0.5 } },
-    ]);
-    expect(r.piles).toHaveLength(0);
-    expect(r.issues.get('x')).toBe('cycle');
-    expect(r.issues.get('z')).toBe('missing-reference');
-  });
-
-  it('sets an angled pile by swinging two tapes', () => {
-    const { piles } = resolveDesign(specs);
-    const ins = setoutInstruction(
-      piles.find((p) => p.id === 'p')!,
-      piles,
-    )!;
-    expect(ins.kind).toBe('swing');
-    if (ins.kind === 'swing') {
-      expect(ins.a.id).toBe('a');
-      expect(ins.da).toBeCloseTo(1000);
-      expect(ins.b.id).toBe('b');
-      expect(ins.db).toBeCloseTo(Math.hypot(4000, 1000));
-      expect(ins.side).toBe('left');
+  it('never refers to a pile that is not in place yet', () => {
+    // C1 is derived from C4 (distance + angle) and C2 sits between C1 and C3: C1 must come first,
+    // and its tapes must not come from C2 (derived) even though C2 is nearer
+    const { piles, constraints } = field20();
+    const derive = new Set(['C1', 'C2', 'C5']);
+    const ps = piles.map((p) => ({ ...p, setout: derive.has(p.label) ? 'derive' : 'measure' }) as Pile);
+    const id = (l: string) => ps.find((p) => p.label === l)!.id;
+    const cs: Constraint[] = [
+      ...constraints.filter((c) => !('p' in c && c.p === id('C1')) || c.kind === 'ratio'),
+      { id: 'x1', kind: 'distance', a: id('C4'), b: id('C1'), d: 2238 },
+      { id: 'x2', kind: 'angle', a: id('C4'), b: id('C1'), angle: -90, ref: null },
+    ];
+    const steps = setoutPlan(
+      ps.filter((p) => p.setout === 'derive'),
+      ps.filter((p) => p.setout === 'measure'),
+      cs,
+    );
+    const placed = new Set(ps.filter((p) => p.setout === 'measure').map((p) => p.id));
+    for (const s of steps) {
+      expect(s.instruction).not.toBeNull();
+      const refs = s.instruction!.kind === 'string' ? [s.instruction!.from, s.instruction!.to] : [s.instruction!.a, s.instruction!.b];
+      for (const r of refs) expect(placed.has(r.id)).toBe(true);
+      placed.add(s.pile.id);
     }
+    expect(steps.map((s) => s.pile.label).indexOf('C1')).toBeLessThan(steps.map((s) => s.pile.label).indexOf('C2'));
   });
 });
 
@@ -180,7 +182,7 @@ describe('measurements', () => {
   it('recommends 15 pairs for a 20′ and 6 for four corners', () => {
     const { piles } = field20();
     expect(recommendedPairs(piles)).toHaveLength(15);
-    expect(recommendedPairs(piles.filter((p) => p.def.kind === 'fixed'))).toHaveLength(6);
+    expect(recommendedPairs(piles.filter((p) => p.setout === 'measure'))).toHaveLength(6);
   });
 });
 

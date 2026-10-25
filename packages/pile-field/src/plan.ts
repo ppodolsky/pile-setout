@@ -20,7 +20,7 @@ export interface PlanInput {
   readonly tolerance: number;
   /** Pile ids treated as exact references. */
   readonly pinned: ReadonlySet<string>;
-  /** Parametric piles: set out from their references, or measured like fixed piles. */
+  /** Piles marked “set out from neighbours”: set out after the others, or measured like them. */
   readonly parametric: ParametricMode;
   /** Assumed precision of one tape reading, mm (1σ). */
   readonly sigma?: number;
@@ -29,7 +29,7 @@ export interface PlanInput {
 interface PlanBase {
   /** Piles solved from measurements. */
   readonly measured: readonly Pile[];
-  /** Parametric piles set out from their references (not measured). */
+  /** Piles set out from others after the measured ones are corrected (not measured). */
   readonly derived: readonly Pile[];
   /** Actual positions of measured piles (field frame), when measurements allow. */
   readonly positions: ReadonlyMap<string, Vec2>;
@@ -75,8 +75,8 @@ export function observations(measurements: readonly Measurement[]): DistanceObse
 /** The whole calculation: adjustment → rigidity → blunder test → minimum-moves placement. */
 export function computePlan(input: PlanInput): Plan {
   const { piles, tolerance, pinned, parametric } = input;
-  const measured = piles.filter((p) => !isDerived(p, piles, parametric));
-  const derived = piles.filter((p) => isDerived(p, piles, parametric));
+  const measured = piles.filter((p) => !isDerived(p, parametric));
+  const derived = piles.filter((p) => isDerived(p, parametric));
   const base = { measured, derived, positions: new Map<string, Vec2>() };
   const adjustment = adjustDistances(measured, observations(input.measurements), { sigma: input.sigma ?? 1 });
   if (!adjustment) return { ...base, status: 'empty' };

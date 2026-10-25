@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { needsMove, setoutInstruction, fractionWords, type Correction, type Pile, type Plan } from '@buildkit/pile-field';
+import { fractionWords, needsMove, type Correction, type Pile, type Plan, type SetoutStep } from '@buildkit/pile-field';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { fmt, plural, sfmt } from '@/lib/format';
@@ -59,7 +59,7 @@ function Summary({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
         return (
           <Note tone="ok">
             <b>All measured piles are within tolerance.</b>
-            {plan.derived.length ? ' Set the parametric piles from them.' : ' No moves needed.'}
+            {plan.derived.length ? ' Then set out the others from them, in the numbered order.' : ' No moves needed.'}
           </Note>
         );
       return (
@@ -69,7 +69,7 @@ function Summary({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
           </b>{' '}
           out of {plan.measured.length} measured piles — move each orange pile once, onto the cross, in the numbered order (largest first).
           {plan.derived.length
-            ? ` Then set the ${plan.derived.length} parametric ${plural(plan.derived.length, 'pile')} from their corrected references.`
+            ? ` Then set out the other ${plan.derived.length} ${plural(plan.derived.length, 'pile')} in their numbered order, from piles already in place.`
             : ''}
         </Note>
       );
@@ -155,11 +155,17 @@ function MoveCard({
   );
 }
 
-function SetoutCard({ pile, piles }: { pile: Pile; piles: readonly Pile[] }) {
-  const ins = setoutInstruction(pile, piles);
+function SetoutCard({ step, piles }: { step: SetoutStep; piles: readonly Pile[] }) {
+  const { pile, instruction: ins, order } = step;
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-card p-2.5 shadow-[inset_0_3px_0_var(--primary)]">
       <div className="flex items-center gap-2">
+        <span
+          className="grid size-6 place-items-center rounded-full border border-primary text-xs font-bold text-primary"
+          title="Set-out order"
+        >
+          {order}
+        </span>
         <span className="font-mono font-bold">{pile.label}</span>
         <MiniMap piles={piles} highlight={[pile.id]} className="ml-auto" />
         <span className="text-xs font-semibold text-primary">set</span>
@@ -195,13 +201,18 @@ function SetoutCard({ pile, piles }: { pile: Pile; piles: readonly Pile[] }) {
           </div>
         </>
       )}
-      <div className="mt-auto text-xs font-semibold text-primary">after its references are corrected</div>
+      {!ins && (
+        <div className="py-4 text-sm text-muted-foreground">
+          No two piles in place to set it from yet — mark it “Measure it” in Design, or tie it to measured piles.
+        </div>
+      )}
+      <div className="mt-auto text-xs font-semibold text-primary">after the moves, from piles already in place</div>
     </div>
   );
 }
 
 /** Cards in the field's own arrangement (rows × columns) when it fits, otherwise in move order. */
-function CardsGrid({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
+function CardsGrid({ plan, piles, setout }: { plan: Plan; piles: readonly Pile[]; setout: readonly SetoutStep[] }) {
   const tol = useProject((s) => s.fieldwork.tolerance);
   const hover = useEditor((s) => s.hover);
   const host = useRef<HTMLDivElement>(null);
@@ -223,7 +234,7 @@ function CardsGrid({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
     xs.length * ys.length <= piles.length + 1 &&
     xs.length * 160 + (xs.length - 1) * 12 <= width;
   const corrections = plan.status === 'ok' ? new Map(plan.placement.corrections.map((c) => [c.id, c])) : new Map<string, Correction>();
-  const derived = new Set(plan.derived.map((p) => p.id));
+  const setoutOf = new Map(setout.map((s) => [s.pile.id, s]));
   const steps = plan.status === 'ok' ? plan.steps : new Map<string, number>();
 
   return (
@@ -233,13 +244,14 @@ function CardsGrid({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
         style={{ gridTemplateColumns: spatial ? `repeat(${xs.length}, minmax(0, 1fr))` : 'repeat(auto-fill, minmax(165px, 1fr))' }}
       >
         {piles.map((p, i) => {
-          const order = derived.has(p.id) ? 80 + i : (steps.get(p.id) ?? 100 + i);
+          const so = setoutOf.get(p.id);
+          const order = so ? 60 + so.order : (steps.get(p.id) ?? 100 + i);
           const style = spatial ? { gridColumn: xs.indexOf(Math.round(p.x)) + 1, gridRow: ys.indexOf(Math.round(p.y)) + 1 } : { order };
           return (
             <div key={p.id} style={style} onMouseEnter={() => hover(p.id)} className="flex">
               <div className="w-full [&>div]:h-full">
-                {derived.has(p.id) ? (
-                  <SetoutCard pile={p} piles={piles} />
+                {so ? (
+                  <SetoutCard step={so} piles={piles} />
                 ) : (
                   <MoveCard pile={p} c={corrections.get(p.id)} step={steps.get(p.id)} piles={piles} measured={plan.measured} tol={tol} />
                 )}
@@ -331,7 +343,7 @@ function NumbersTable({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
 }
 
 export function MovePlanCard() {
-  const { plan, piles } = useFieldwork();
+  const { plan, piles, setout } = useFieldwork();
   return (
     <Card className="gap-4 py-4">
       <CardHeader className="px-4">
@@ -351,7 +363,7 @@ export function MovePlanCard() {
             <span>Diagrams use the plan’s orientation (Y up).</span>
           </div>
         )}
-        <CardsGrid plan={plan} piles={piles} />
+        <CardsGrid plan={plan} piles={piles} setout={setout} />
         <Notes plan={plan} piles={piles} />
         <NumbersTable plan={plan} piles={piles} />
       </CardContent>

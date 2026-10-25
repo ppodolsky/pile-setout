@@ -3,10 +3,11 @@ import { bounds, expandBox, type Vec2 } from '@buildkit/geometry';
 import type { Pile } from '@buildkit/pile-field';
 import { Grid, Label, Seg, toScreen, toWorld, useView, Viewport } from '@/drawing';
 import { fmt } from '@/lib/format';
+import { ConstraintGlyphs } from '../drawing/constraints';
+import { Containers, PileHead, PileMark } from '../drawing/layers';
+import { useDesign, useOutlines } from '../model/derived';
 import { useEditor } from '../model/editor';
-import { useOutlines, useResolved } from '../model/derived';
 import { useProject } from '../model/store';
-import { Containers, Dependencies, PileHead, PileHit, PileMark } from '../drawing/layers';
 
 const SNAP_GRID = 5; // mm
 const SNAP_PX = 8; // align with another pile's axis within this many pixels
@@ -32,12 +33,15 @@ function snap(p: Vec2, piles: readonly Pile[], s: number, except?: string) {
 }
 
 export function DesignCanvas() {
-  const { piles } = useResolved();
+  const { piles, status } = useDesign();
+  const constraints = useProject((s) => s.design.constraints);
   const outlines = useOutlines();
   const head = useProject((s) => s.design.template.head);
-  const { addPile, updatePile } = useProject.getState();
-  const { tool, selected, picks, select, pick, setTool } = useEditor();
+  const showConstraints = useProject((s) => s.view.showConstraints);
+  const { addPile } = useProject.getState();
+  const { tool, selected, constraint, select, selectConstraint } = useEditor();
   const [cursor, setCursor] = useState<Vec2 | null>(null);
+  const boxBase = useRef<string[]>([]);
 
   const content = useMemo(() => {
     const pts = [
@@ -47,69 +51,96 @@ export function DesignCanvas() {
         { x: o.x0 + o.length, y: o.width },
       ]),
     ];
-    return expandBox(pts.length ? bounds(pts) : { minX: 0, minY: 0, maxX: 6000, maxY: 2400 }, 250);
+    return expandBox(pts.length ? bounds(pts) : { minX: 0, minY: 0, maxX: 6000, maxY: 2400 }, 350);
   }, [piles, outlines]);
-
-  const onPilePick = (p: Pile) => {
-    if (tool === 'select' || tool === 'fixed') return select(p.id);
-    if (tool === 'polar') {
-      const id = addPile({ kind: 'polar', from: p.id, distance: 1000, angle: 0, ref: null });
-      select(id);
-      return setTool('select');
-    }
-    // between: two picks
-    if (!picks.length) return pick(p.id);
-    if (picks[0] === p.id) return;
-    const id = addPile({ kind: 'between', from: picks[0]!, to: p.id, by: 'ratio', t: 0.5 });
-    select(id);
-    setTool('select');
-  };
 
   return (
     <Viewport
       label="Pile design"
       content={content}
+      padding={64}
       className="h-full min-h-[320px]"
-      cursor={tool === 'fixed' ? 'crosshair' : tool === 'select' ? 'grab' : 'pointer'}
+      cursor={tool === 'pile' ? 'crosshair' : 'default'}
       onPointerWorld={setCursor}
       onBackgroundClick={(p, v) => {
-        if (tool !== 'fixed') return select(null);
-        // placed through the same snapping the preview shows
+        if (tool !== 'pile') {
+          select([]);
+          selectConstraint(null);
+          return;
+        }
         const { at } = snap(p, piles, v.s);
-        select(addPile({ kind: 'fixed', x: at.x, y: at.y }));
+        select([addPile(at)]);
+      }}
+      onBox={(b, done, additive) => {
+        if (tool !== 'select') return;
+        if (!boxBase.current.length || !additive) boxBase.current = additive ? selected : [];
+        const [x0, x1] = [Math.min(b.a.x, b.b.x), Math.max(b.a.x, b.b.x)];
+        const [y0, y1] = [Math.min(b.a.y, b.b.y), Math.max(b.a.y, b.b.y)];
+        const inside = piles.filter((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1).map((p) => p.id);
+        select([...new Set([...boxBase.current, ...inside])]);
+        if (done) boxBase.current = [];
       }}
     >
       <Grid />
       <Containers outlines={outlines} />
-      <Dependencies piles={piles} emphasis={selected} />
       {piles.map((p) => (
         <PileHead
           key={p.id}
           pile={p}
           head={head}
-          tone={p.id === selected || picks.includes(p.id) ? 'selected' : p.def.kind !== 'fixed' ? 'param' : p.shared ? 'shared' : 'fixed'}
+          tone={
+            selected.includes(p.id)
+              ? 'selected'
+              : p.setout === 'derive'
+                ? 'param'
+                : !status.determined.has(p.id)
+                  ? 'free'
+                  : p.shared
+                    ? 'shared'
+                    : 'fixed'
+          }
         />
       ))}
-      <SelectedDimensions piles={piles} selected={selected} />
-      {piles.map((p) => (
-        <PileMark key={p.id} pile={p} color={p.def.kind === 'fixed' ? 'var(--draw-ink)' : 'var(--draw-param)'} />
-      ))}
-      {piles.map((p) =>
-        tool === 'select' && p.def.kind === 'fixed' && p.id === selected ? (
-          <DragHandle key={p.id} pile={p} piles={piles} onMove={(at) => updatePile(p.id, { def: { kind: 'fixed', x: at.x, y: at.y } })} />
-        ) : (
-          <PileHit
-            key={p.id}
-            pile={p}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onPilePick(p);
-            }}
-          />
-        ),
+      {showConstraints && (
+        <ConstraintGlyphs
+          piles={piles}
+          constraints={constraints}
+          conflicts={status.conflicts}
+          selected={constraint}
+          onPick={(id) => selectConstraint(id)}
+        />
       )}
-      {tool === 'fixed' && cursor && <PlacementGhost at={cursor} piles={piles} head={head} />}
+      {piles.map((p) => (
+        <PileMark key={p.id} pile={p} color={status.determined.has(p.id) ? 'var(--draw-ink)' : 'var(--draw-free)'} />
+      ))}
+      {selected.map((id, i) => {
+        const p = piles.find((q) => q.id === id);
+        return p ? <SelectionOrder key={id} at={p} n={i + 1} show={selected.length > 1} /> : null;
+      })}
+      {piles.map((p) => (
+        <PileHandle key={p.id} pile={p} piles={piles} />
+      ))}
+      {tool === 'pile' && cursor && <PlacementGhost at={cursor} piles={piles} head={head} />}
     </Viewport>
+  );
+}
+
+/** Pick order badge (constraints use it: e.g. "last picked goes in the middle"). */
+function SelectionOrder({ at, n, show }: { at: Vec2; n: number; show: boolean }) {
+  const v = useView();
+  const p = toScreen(v, at);
+  return (
+    <g pointerEvents="none">
+      <circle cx={p.x} cy={p.y} r={13} fill="none" stroke="var(--draw-select)" strokeWidth={2} />
+      {show && (
+        <g>
+          <circle cx={p.x - 14} cy={p.y + 14} r={7} fill="var(--draw-select)" />
+          <text x={p.x - 14} y={p.y + 17.5} fontSize={9} textAnchor="middle" fill="white" fontWeight={700}>
+            {n}
+          </text>
+        </g>
+      )}
+    </g>
   );
 }
 
@@ -131,87 +162,57 @@ function PlacementGhost({ at, piles, head }: { at: Vec2; piles: readonly Pile[];
   );
 }
 
-/** Drag a fixed pile; snaps like placement. */
-function DragHandle({ pile, piles, onMove }: { pile: Pile; piles: readonly Pile[]; onMove: (p: Vec2) => void }) {
+/**
+ * Click to select (Shift/Ctrl/⌘ to add), drag to move. Moving goes through the solver: the pile
+ * follows the cursor only as far as its constraints allow, and constrained neighbours follow it.
+ */
+function PileHandle({ pile, piles }: { pile: Pile; piles: readonly Pile[] }) {
   const v = useView();
-  const drag = useRef<{ dx: number; dy: number } | null>(null);
+  const { tool, selected, select, toggle, multi } = useEditor();
+  const drag = useRef<{ dx: number; dy: number; x: number; y: number; moved: boolean } | null>(null);
   const [guides, setGuides] = useState<{ gx?: Pile; gy?: Pile }>({});
   const s = toScreen(v, pile);
-  const world = (e: React.PointerEvent) => {
+  const local = (e: React.PointerEvent) => {
     const r = (e.currentTarget as SVGElement).ownerSVGElement!.getBoundingClientRect();
-    return toWorld(v, e.clientX - r.left, e.clientY - r.top);
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
   return (
     <g>
       {guides.gx && <Seg a={guides.gx} b={{ x: guides.gx.x, y: pile.y }} stroke="var(--draw-select)" strokeDasharray="3 3" />}
       {guides.gy && <Seg a={guides.gy} b={{ x: pile.x, y: guides.gy.y }} stroke="var(--draw-select)" strokeDasharray="3 3" />}
       <circle
+        data-pile={pile.label}
         cx={s.x}
         cy={s.y}
         r={16}
         fill="transparent"
-        style={{ cursor: 'move' }}
+        style={{ cursor: tool === 'select' ? 'move' : 'pointer' }}
         onPointerDown={(e) => {
           e.stopPropagation();
+          if (multi || e.shiftKey || e.metaKey || e.ctrlKey) return toggle(pile.id);
+          if (!selected.includes(pile.id)) select([pile.id]);
+          if (tool !== 'select') return;
           e.currentTarget.setPointerCapture(e.pointerId);
-          const w = world(e);
-          drag.current = { dx: pile.x - w.x, dy: pile.y - w.y };
+          const p = local(e);
+          const w = toWorld(v, p.x, p.y);
+          drag.current = { dx: pile.x - w.x, dy: pile.y - w.y, x: p.x, y: p.y, moved: false };
         }}
         onPointerMove={(e) => {
-          if (!drag.current) return;
-          const w = world(e);
-          const { at, gx, gy } = snap({ x: w.x + drag.current.dx, y: w.y + drag.current.dy }, piles, v.s, pile.id);
+          const d = drag.current;
+          if (!d) return;
+          const p = local(e);
+          if (!d.moved && Math.hypot(p.x - d.x, p.y - d.y) < 3) return;
+          d.moved = true;
+          const w = toWorld(v, p.x, p.y);
+          const { at, gx, gy } = snap({ x: w.x + d.dx, y: w.y + d.dy }, piles, v.s, pile.id);
           setGuides({ ...(gx ? { gx } : {}), ...(gy ? { gy } : {}) });
-          if (at.x !== pile.x || at.y !== pile.y) onMove(at);
+          useProject.getState().movePile(pile.id, at);
         }}
         onPointerUp={() => {
           drag.current = null;
           setGuides({});
         }}
       />
-    </g>
-  );
-}
-
-/** Dimensions of the selected parametric pile: distance along the line, or distance + angle. */
-function SelectedDimensions({ piles, selected }: { piles: readonly Pile[]; selected: string | null }) {
-  const p = piles.find((q) => q.id === selected);
-  if (!p || p.def.kind === 'fixed') return null;
-  const at = (id: string) => piles.find((q) => q.id === id);
-  if (p.def.kind === 'between') {
-    const a = at(p.def.from);
-    if (!a) return null;
-    const d = Math.hypot(p.x - a.x, p.y - a.y);
-    return (
-      <Label
-        at={{ x: (a.x + p.x) / 2, y: (a.y + p.y) / 2 }}
-        dy={-6}
-        textAnchor="middle"
-        size={11}
-        fill="var(--draw-param)"
-        fontWeight={600}
-      >
-        {fmt(d, 0)}
-      </Label>
-    );
-  }
-  const a = at(p.def.from);
-  if (!a) return null;
-  return (
-    <g>
-      <Label
-        at={{ x: (a.x + p.x) / 2, y: (a.y + p.y) / 2 }}
-        dy={-6}
-        textAnchor="middle"
-        size={11}
-        fill="var(--draw-param)"
-        fontWeight={600}
-      >
-        {fmt(p.def.distance, 0)}
-      </Label>
-      <Label at={a} dx={34} dy={-4} size={11} fill="var(--draw-param)" fontWeight={600}>
-        {fmt(p.def.angle, 1)}°
-      </Label>
     </g>
   );
 }
