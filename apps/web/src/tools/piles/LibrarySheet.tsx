@@ -16,12 +16,12 @@ const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: '
 export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const current = useProject((s) => s.sketch);
   const [items, setItems] = useState<SketchMeta[]>([]);
-  const refresh = () => {
-    saveCurrent();
-    setItems(sketches.list(TOOL_ID));
+  const refresh = async () => {
+    await saveCurrent();
+    setItems(await sketches.list(TOOL_ID));
   };
   useEffect(() => {
-    if (open) refresh();
+    if (open) void refresh();
   }, [open, current]);
 
   return (
@@ -41,11 +41,11 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => {
-              saveCurrent();
+            onClick={async () => {
+              await saveCurrent();
               useProject.getState().reset();
               useCadEditor.getState().select([]);
-              refresh();
+              await refresh();
             }}
           >
             <FilePlus2 /> New sketch
@@ -55,9 +55,9 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
               <li key={m.id} className={cn('flex items-center gap-2 p-2.5', m.id === current.id && 'bg-accent/60')}>
                 <button
                   className="min-w-0 flex-1 text-left"
-                  onClick={() => {
+                  onClick={async () => {
                     if (m.id !== current.id) {
-                      openSketch(m.id);
+                      await openSketch(m.id);
                       useCadEditor.getState().select([]);
                     }
                     onOpenChange(false);
@@ -75,8 +75,8 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   size="icon"
                   variant="ghost"
                   aria-label={`Open ${m.name}`}
-                  onClick={() => {
-                    openSketch(m.id);
+                  onClick={async () => {
+                    await openSketch(m.id);
                     useCadEditor.getState().select([]);
                     onOpenChange(false);
                   }}
@@ -88,9 +88,9 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   size="icon"
                   variant="ghost"
                   aria-label={`Duplicate ${m.name}`}
-                  onClick={() => {
-                    duplicateSketch(m.id, uid('s'));
-                    refresh();
+                  onClick={async () => {
+                    await duplicateSketch(m.id, uid('s'));
+                    await refresh();
                   }}
                 >
                   <Copy />
@@ -101,10 +101,10 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   aria-label={`Delete ${m.name}`}
                   className="text-muted-foreground hover:text-destructive"
                   disabled={m.id === current.id}
-                  onClick={() => {
+                  onClick={async () => {
                     if (!confirm(`Delete “${m.name}”? This cannot be undone.`)) return;
-                    sketches.remove(m.id);
-                    refresh();
+                    await sketches.remove(m.id);
+                    await refresh();
                   }}
                 >
                   <Trash2 />

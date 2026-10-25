@@ -15,20 +15,20 @@ const summary = (d: ProjectData) => {
 };
 
 /** Writes the current sketch to the library. */
-export function saveCurrent(): void {
+export function saveCurrent(): Promise<void> {
   const { sketch, design, fieldwork, view } = useProject.getState();
   const data: ProjectData = { design, fieldwork, view };
-  sketches.save({ id: sketch.id, tool: TOOL_ID, name: sketch.name, updatedAt: Date.now(), summary: summary(data), data });
+  return sketches.save({ id: sketch.id, tool: TOOL_ID, name: sketch.name, updatedAt: Date.now(), summary: summary(data), data });
 }
 
 /** Keeps the library copy of the current sketch up to date (debounced). Call once at start-up. */
 export function startAutosave(): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  saveCurrent();
+  void saveCurrent();
   const unsubscribe = useProject.subscribe((s, prev) => {
     if (s.design === prev.design && s.fieldwork === prev.fieldwork && s.view === prev.view && s.sketch === prev.sketch) return;
     clearTimeout(timer);
-    timer = setTimeout(saveCurrent, 400);
+    timer = setTimeout(() => void saveCurrent(), 400);
   });
   return () => {
     clearTimeout(timer);
@@ -36,17 +36,17 @@ export function startAutosave(): () => void {
   };
 }
 
-export function openSketch(id: string): boolean {
-  const stored = sketches.load<ProjectData>(id);
+export async function openSketch(id: string): Promise<boolean> {
+  const stored = await sketches.load<ProjectData>(id);
   if (!stored) return false;
-  saveCurrent();
+  await saveCurrent();
   const identity: SketchIdentity = { id: stored.id, name: stored.name };
   useProject.getState().open(identity, stored.data);
   return true;
 }
 
-export function duplicateSketch(id: string, newId: string): void {
-  const stored = sketches.load<ProjectData>(id);
+export async function duplicateSketch(id: string, newId: string): Promise<void> {
+  const stored = await sketches.load<ProjectData>(id);
   if (!stored) return;
-  sketches.save({ ...stored, id: newId, name: `${stored.name} (copy)`, updatedAt: Date.now() });
+  await sketches.save({ ...stored, id: newId, name: `${stored.name} (copy)`, updatedAt: Date.now() });
 }

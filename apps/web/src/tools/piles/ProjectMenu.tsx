@@ -48,7 +48,7 @@ export function ProjectMenu() {
     try {
       const d = JSON.parse(await f.text());
       if (d?.kind !== FILE_KIND || !d.design?.doc || !d.fieldwork?.measurements) throw new Error('not a pile field project (version 4)');
-      saveCurrent();
+      await saveCurrent();
       useProject
         .getState()
         .open(newIdentity(d.name ?? f.name.replace(/\.json$/, '')), { design: d.design, fieldwork: d.fieldwork, view: d.view });
@@ -108,8 +108,8 @@ export function ProjectMenu() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                saveCurrent();
+              onClick={async () => {
+                await saveCurrent();
                 useProject.getState().reset();
                 useCadEditor.getState().select([]);
               }}
