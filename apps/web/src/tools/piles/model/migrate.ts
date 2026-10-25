@@ -12,7 +12,7 @@ interface V3Pile {
 }
 
 /** Version 3 → 4: each pile becomes a point plus a pile element on it (same ids). */
-export function upgradeDesign(piles: readonly V3Pile[], constraints: readonly CadConstraint[], head: number): PileDesign {
+function upgradeDesign(piles: readonly V3Pile[], constraints: readonly CadConstraint[], head: number): PileDesign {
   return {
     points: piles.map((p) => ({ id: p.id, x: p.x, y: p.y })),
     lines: [],

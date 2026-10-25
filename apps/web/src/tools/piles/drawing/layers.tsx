@@ -1,6 +1,6 @@
 import { applyRigid, type RigidTransform, type Vec2 } from '@buildkit/geometry';
 import { CASTING, CONTAINERS, POCKETS, type ContainerOutline, type Pile } from '@buildkit/pile-field';
-import { Dot, Label, Poly, toScreen, useView } from '@/drawing';
+import { Label, Poly, toScreen, useView } from '@/drawing';
 
 /** Optional design → field-frame placement (field work); identity in design mode. */
 type Frame = RigidTransform | undefined;
@@ -105,9 +105,4 @@ export function PileMark({
       </Label>
     </g>
   );
-}
-
-/** Hit target for picking a pile (screen-size, invisible). */
-export function PileHit({ pile, frame, ...rest }: { pile: Pile; frame?: Frame } & Omit<React.SVGProps<SVGCircleElement>, 'r'>) {
-  return <Dot at={place(frame, pile)} r={16} fill="transparent" style={{ cursor: 'pointer' }} {...rest} />;
 }
