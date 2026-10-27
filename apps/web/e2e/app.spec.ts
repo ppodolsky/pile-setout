@@ -241,6 +241,36 @@ test('speaks Russian: menus, plurals and numbers', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Проект' })).toBeVisible();
 });
 
+test('migrates a project saved by the previous version (template → background drawing)', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'buildkit/pile-field/v2',
+      JSON.stringify({
+        version: 4,
+        state: {
+          design: { template: { containers: ['10', '20'], head: 250, inset: 0 }, edited: false },
+          fieldwork: {
+            measurements: [{ id: 'm1', a: 'p1', b: 'p2', reading: 2866, correctionA: null, correctionB: null }],
+            tolerance: 3,
+            pinned: [],
+            parametric: 'derived',
+          },
+          view: { exaggeration: 10, showLines: true, showConstraints: true },
+          sketch: { id: 's1', name: 'Old one' },
+        },
+      }),
+    );
+  });
+  await page.goto('./#/piles/design');
+  await page.reload();
+  await expect(page.getByText('Piles (8)')).toBeVisible();
+  await expect(page.getByRole('button', { name: "Hide 10' + 20'" })).toBeVisible(); // the template became a drawing
+  await page.getByRole('link', { name: 'Field work' }).click();
+  await expect(page.locator('[data-reading]').first()).toHaveValue('2866');
+});
+
 test('migrates a session saved by the first version', async ({ page }) => {
   await page.goto('./');
   await page.evaluate(() => {
