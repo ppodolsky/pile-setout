@@ -88,6 +88,19 @@ version are migrated) and has undo/redo (zundo; typing is grouped into one step)
 tool) lives in `model/editor.ts` and is neither saved nor undoable. Projects can be exported to /
 opened from a JSON file.
 
+## Languages
+
+`apps/web/src/i18n`: i18next with typed resources — English (`locales/en`) is the source; each
+other language (`locales/ru`, …) is typed `Translation<typeof en>`, so a missing key fails the
+build, and a unit test checks keys, plural forms (Russian: one / few / many / other) and
+`{{placeholders}}`. The language comes from the user's choice (globe menu, saved per device), else
+the browser. Numbers and dates follow it (`fmt()` → `5 858,5` in Russian; inputs accept a comma).
+Components use `useTranslation('<namespace>')`; framework-free packages stay English and the app
+translates their output by id (selection actions, constraint kinds, snap labels).
+
+To add a language: add it to `LANGUAGES` in `i18n/index.ts`, copy `locales/en` to `locales/<code>`
+as `Translation<…>` files, translate, and register it in `i18n/index.ts`.
+
 ## Adding things
 
 - **A new constraint type:** add it to `packages/sketch/src/constraints.ts` (residuals + points), a

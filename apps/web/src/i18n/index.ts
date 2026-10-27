@@ -21,7 +21,7 @@ function detect(): Language {
   } catch {
     /* storage unavailable */
   }
-  const nav = typeof navigator !== 'undefined' ? navigator.languages ?? [navigator.language] : [];
+  const nav = typeof navigator !== 'undefined' ? (navigator.languages ?? [navigator.language]) : [];
   for (const tag of nav) {
     const code = tag.slice(0, 2).toLowerCase();
     if (LANGUAGES.some((l) => l.code === code)) return code as Language;

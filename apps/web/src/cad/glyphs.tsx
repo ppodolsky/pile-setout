@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Point } from '@buildkit/cad';
 import type { Vec2 } from '@buildkit/geometry';
 import { constraintPoints, type Constraint } from '@buildkit/sketch';
@@ -57,6 +58,7 @@ export function ConstraintGlyphs({
   selected: string | null;
   onPick: (id: string) => void;
 }) {
+  const { t } = useTranslation('cad');
   const v = useView();
   const at = new Map(points.map((p) => [p.id, p]));
   const S = (id: string) => toScreen(v, at.get(id)!);
@@ -133,7 +135,14 @@ export function ConstraintGlyphs({
             const m = { x: a.x + (b.x - a.x) * 0.3, y: a.y + (b.y - a.y) * 0.3 };
             const off = c.kind === 'horizontal' ? { x: 0, y: -12 } : { x: 14, y: 0 };
             return (
-              <Tag key={c.id} x={m.x + off.x} y={m.y + off.y} text={c.kind === 'horizontal' ? 'H' : 'V'} color={color} onPick={pick} />
+              <Tag
+                key={c.id}
+                x={m.x + off.x}
+                y={m.y + off.y}
+                text={c.kind === 'horizontal' ? t('glyph.horizontal') : t('glyph.vertical')}
+                color={color}
+                onPick={pick}
+              />
             );
           }
           case 'angle': {
@@ -193,7 +202,7 @@ export function ConstraintGlyphs({
             return (
               <g key={c.id}>
                 {line(a, b, '6 4', 0.8)}
-                <Tag x={p.x} y={p.y + 22} text={c.kind === 'ratio' ? fractionGlyph(c.t) : 'on line'} color={color} onPick={pick} />
+                <Tag x={p.x} y={p.y + 22} text={c.kind === 'ratio' ? fractionGlyph(c.t) : t('glyph.onLine')} color={color} onPick={pick} />
               </g>
             );
           }

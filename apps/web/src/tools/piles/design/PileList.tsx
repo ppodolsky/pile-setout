@@ -1,4 +1,5 @@
 import { CircleCheck, CircleDashed, Crosshair, Ruler } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useCadEditor, isSelected } from '@/cad';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fmt } from '@/lib/format';
@@ -7,13 +8,14 @@ import { useDesign } from '../model/derived';
 
 /** All piles: constraint status, field-work role, position. Click to select, Shift-click to add. */
 export function PileList() {
+  const { t } = useTranslation(['design', 'cad']);
   const { piles, status } = useDesign();
   const selection = useCadEditor((s) => s.selection);
   const { select, toggle } = useCadEditor.getState();
   return (
     <Card className="gap-2 py-4">
       <CardHeader className="px-4">
-        <CardTitle>Piles ({piles.length})</CardTitle>
+        <CardTitle>{t('list.title', { n: String(piles.length) })}</CardTitle>
       </CardHeader>
       <CardContent className="px-2">
         <ul className="divide-y">
@@ -33,11 +35,9 @@ export function PileList() {
                   <span className="font-mono font-semibold">{p.label}</span>
                   <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                     {p.setout === 'derive' ? <Crosshair className="size-3 text-primary" /> : <Ruler className="size-3" />}
-                    {p.setout === 'derive' ? 'set out from neighbours' : 'measured'}
+                    {p.setout === 'derive' ? t('list.derive') : t('list.measure')}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {fmt(p.x, 0)}, {fmt(p.y, 0)}
-                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">{t('cad:coords', { x: fmt(p.x, 0), y: fmt(p.y, 0) })}</span>
                 </button>
               </li>
             );

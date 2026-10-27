@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { snapPoint, type Element, type EntityRef, type Guide, type SnapResult } from '@buildkit/cad';
 import { bounds, expandBox, type Box, type Vec2 } from '@buildkit/geometry';
 import { Grid, toScreen, toWorld, useView, Viewport } from '@/drawing';
+import { fmt } from '@/lib/format';
 import { ConstraintGlyphs } from './glyphs';
 import { isSelected, useCadEditor } from './editor';
+import type { CadT } from './meta';
 import type { CadModel, CadOps } from './ops';
 
 export interface CadCanvasProps<E extends Element> {
@@ -316,7 +319,18 @@ function PointHandle<E extends Element>({
   );
 }
 
-function Guides({ guides, label, at }: { guides: readonly Guide[]; label: string | null; at: Vec2 }) {
+/** A snap readout in the current language: 'midpoint' / 'on line' translated, polar distance formatted. */
+function snapLabel(label: string, t: CadT): string {
+  if (label === 'midpoint') return t('snap.midpoint');
+  if (label === 'on line') return t('snap.onLine');
+  const polar = /^(-?[\d.]+)° · ([\d,.]+)$/.exec(label); // "90° · 2,500"
+  if (polar) return `${polar[1]}° · ${fmt(Number(polar[2]!.replaceAll(',', '')), 0)}`;
+  return label;
+}
+
+function Guides({ guides, label: raw, at }: { guides: readonly Guide[]; label: string | null; at: Vec2 }) {
+  const { t } = useTranslation('cad');
+  const label = raw && snapLabel(raw, t);
   const v = useView();
   const S = (p: Vec2) => toScreen(v, p);
   const P = S(at);
@@ -361,11 +375,12 @@ function PlacementGhost<E extends Element>({
   size: number;
   rubberFrom: Vec2 | null;
 }) {
+  const { t } = useTranslation('cad');
   const v = useView();
   const s = snapPoint(at, { points: model.doc.points, lines: model.doc.lines, scale: v.s, anchor });
   const q = toScreen(v, s.at);
   const h = (size * v.s) / 2;
-  const coords = `${Math.round(s.at.x).toLocaleString('en-US')}, ${Math.round(s.at.y).toLocaleString('en-US')}`;
+  const coords = t('coords', { x: fmt(Math.round(s.at.x), 0), y: fmt(Math.round(s.at.y), 0) });
   return (
     <g pointerEvents="none">
       {rubberFrom &&

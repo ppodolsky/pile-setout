@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { applyRigid, bounds, expandBox, type Vec2 } from '@buildkit/geometry';
 import { needsMove, type Pile } from '@buildkit/pile-field';
 import { Badge, Grid, Label, ScreenArrow, Seg, toScreen, useView, Viewport } from '@/drawing';
@@ -14,6 +15,7 @@ import { useProject } from '../model/store';
 
 /** The field as measured: actual stakes, arrows to their design positions, move order. */
 function PlanLayers() {
+  const { t } = useTranslation('fieldwork');
   const v = useView();
   const { plan, piles, setout } = useFieldwork();
   const outlines = useOutlines();
@@ -86,7 +88,7 @@ function PlanLayers() {
             )}
             {isDerived && (
               <Label at={design} dx={20} dy={-13} size={10} fill="var(--draw-param)" fontWeight={600}>
-                set
+                {t('setTag')}
               </Label>
             )}
           </g>
@@ -97,6 +99,7 @@ function PlanLayers() {
 }
 
 export function PlanCard() {
+  const { t } = useTranslation('fieldwork');
   const { piles } = useFieldwork();
   const outlines = useOutlines();
   const view = useProject((s) => s.view);
@@ -114,10 +117,11 @@ export function PlanCard() {
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-4">
-        <CardTitle>Field plan</CardTitle>
+        <CardTitle>{t('plan.title')}</CardTitle>
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           <label className="flex items-center gap-2">
-            Arrows ×<span className="w-5 font-mono font-semibold text-foreground">{view.exaggeration}</span>
+            {t('plan.arrows')}
+            <span className="w-5 font-mono font-semibold text-foreground">{view.exaggeration}</span>
             <Slider
               className="w-28"
               min={1}
@@ -128,19 +132,16 @@ export function PlanCard() {
             />
           </label>
           <label className="flex items-center gap-2">
-            <Switch checked={view.showLines} onCheckedChange={(showLines) => setView({ showLines })} /> measurement lines
+            <Switch checked={view.showLines} onCheckedChange={(showLines) => setView({ showLines })} /> {t('plan.lines')}
           </label>
         </div>
       </CardHeader>
       <CardContent className="space-y-2 px-3">
-        <Viewport label="Field plan" content={content} className="h-[clamp(240px,42vw,520px)] border">
+        <Viewport label={t('plan.title')} content={content} className="h-[clamp(240px,42vw,520px)] border">
           <Grid />
           <PlanLayers />
         </Viewport>
-        <p className="px-1 text-xs text-muted-foreground">
-          Orange dot: stake now. Cross: design position. Arrows are drawn ×{view.exaggeration} longer so the direction is visible; numbers
-          are the real offsets in mm. Teal dashed: parametric piles, set from their references.
-        </p>
+        <p className="px-1 text-xs text-muted-foreground">{t('plan.legend', { n: fmt(view.exaggeration, 0) })}</p>
       </CardContent>
     </Card>
   );

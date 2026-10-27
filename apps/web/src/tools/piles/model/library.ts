@@ -1,5 +1,6 @@
 import { useAuth } from '@/app/backend/auth';
 import { supabase } from '@/app/backend/supabase';
+import i18n from '@/i18n';
 import { cloudSketchStore, localSketchStore, syncedSketchStore, type SketchStore } from '@/app/library';
 import { pilesOf } from './deps';
 import type { ProjectData } from './project';
@@ -23,11 +24,29 @@ useAuth.subscribe((s, prev) => {
   if (s.account) void saveCurrent().then(() => (sketchStore() as ReturnType<typeof syncedSketchStore>).sync(TOOL_ID));
 });
 
-const summary = (d: ProjectData) => {
-  const piles = pilesOf(d.design.doc).length;
-  const readings = d.fieldwork.measurements.filter((m) => m.reading != null).length;
-  return `${piles} piles · ${readings} readings`;
-};
+/** What a sketch's list entry shows, stored language-neutral (JSON) and translated when shown. */
+export interface SketchCounts {
+  readonly piles: number;
+  readonly readings: number;
+}
+
+const summary = (d: ProjectData): string =>
+  JSON.stringify({
+    piles: pilesOf(d.design.doc).length,
+    readings: d.fieldwork.measurements.filter((m) => m.reading != null).length,
+  } satisfies SketchCounts);
+
+/** The counts in a stored summary (also understands the earlier "6 piles · 9 readings" text), or null. */
+export function summaryCounts(text: string | undefined): SketchCounts | null {
+  try {
+    const c = JSON.parse(text ?? '') as Partial<SketchCounts>;
+    if (typeof c.piles === 'number' && typeof c.readings === 'number') return { piles: c.piles, readings: c.readings };
+  } catch {
+    /* not JSON — maybe the older English form */
+  }
+  const m = /^(\d+) piles · (\d+) readings$/.exec(text ?? '');
+  return m ? { piles: Number(m[1]), readings: Number(m[2]) } : null;
+}
 
 /** Writes the current sketch to the library. */
 export function saveCurrent(): Promise<void> {
@@ -63,5 +82,5 @@ export async function openSketch(id: string): Promise<boolean> {
 export async function duplicateSketch(id: string, newId: string): Promise<void> {
   const stored = await sketchStore().load<ProjectData>(id);
   if (!stored) return;
-  await sketchStore().save({ ...stored, id: newId, name: `${stored.name} (copy)`, updatedAt: Date.now() });
+  await sketchStore().save({ ...stored, id: newId, name: i18n.t('project:sketch.copyName', { name: stored.name }), updatedAt: Date.now() });
 }

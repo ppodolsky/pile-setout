@@ -209,6 +209,21 @@ test('exports DXF and opens it again as a new sketch', async ({ page, isMobile }
   await expect(page.getByLabel('This sketch')).toHaveValue('plan');
 });
 
+test('speaks Russian: menus, plurals and numbers', async ({ page }) => {
+  await fresh(page, '/piles/fieldwork');
+  await page.getByRole('button', { name: 'Language' }).click();
+  await page.getByRole('menuitemradio', { name: 'Русский' }).click();
+  await expect(page.getByRole('link', { name: 'Разбивка' })).toBeVisible();
+  await expect(page.getByText('Следующий замер')).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
+  await page.getByRole('button', { name: 'Демо-ошибки' }).click();
+  // Russian number format: space grouping, decimal comma
+  await expect(page.getByText(/^[+−]\d+,\d$/).first()).toBeVisible(); // Δ with a decimal comma
+  // remembered on this device
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Проект' })).toBeVisible();
+});
+
 test('migrates a session saved by the first version', async ({ page }) => {
   await page.goto('./');
   await page.evaluate(() => {

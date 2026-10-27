@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Vec2 } from '@buildkit/geometry';
 import { bounds } from '@buildkit/geometry';
 import type { Pile } from '@buildkit/pile-field';
@@ -23,6 +24,7 @@ export function MoveDiagram({
   tolerance: number;
   moving: boolean;
 }) {
+  const { t } = useTranslation('fieldwork');
   const H = 50;
   const span = Math.max(offset, tolerance * 1.15, 1);
   const k = 36 / span;
@@ -44,7 +46,7 @@ export function MoveDiagram({
       viewBox={`${-H} ${-H} ${2 * H} ${2 * H}`}
       className="block w-full rounded-md border bg-[var(--draw-bg)]"
       role="img"
-      aria-label="Move diagram"
+      aria-label={t('diagrams.move')}
     >
       {Array.from({ length: 2 * n + 1 }, (_, i) => (i - n) * step * k).map((g) => (
         <path key={g} d={`M${g} ${-H}V${H}M${-H} ${g}H${H}`} stroke="var(--draw-grid)" strokeWidth={g === 0 ? 0.6 : 0.35} />
@@ -79,23 +81,24 @@ export function MoveDiagram({
       <path d="M-6 0H6M0 -6V6" stroke="var(--draw-ink)" strokeWidth={1.4} />
       <circle cx={px} cy={py} r={3.6} fill="var(--move)" stroke="var(--draw-bg)" strokeWidth={0.9} />
       <text x={-H + 2.5} y={H - 2.5} fontSize={5} fill="var(--draw-muted)" className="font-mono">
-        grid {fmt(step)} mm
+        {t('diagrams.grid', { step: fmt(step) })}
       </text>
     </svg>
   );
 }
 
 /** Set-out sketch: the string between two piles and the mark at `offset` from the first. */
-export function StringDiagram({ from, to, offset, t }: { from: string; to: string; offset: number; t: number }) {
+export function StringDiagram({ from, to, offset, t: frac }: { from: string; to: string; offset: number; t: number }) {
+  const { t } = useTranslation('fieldwork');
   const x1 = -40;
   const x2 = 40;
-  const px = x1 + Math.min(1.1, Math.max(-0.1, t)) * (x2 - x1);
+  const px = x1 + Math.min(1.1, Math.max(-0.1, frac)) * (x2 - x1);
   return (
     <svg
       viewBox="-50 -50 100 100"
       className="block w-full rounded-md border bg-[var(--draw-bg)]"
       role="img"
-      aria-label={`Set ${fmt(offset, 0)} mm from ${from} towards ${to}`}
+      aria-label={t('diagrams.string', { offset: fmt(offset, 0), from, to })}
     >
       <line x1={x1} y1={8} x2={x2} y2={8} stroke="var(--draw-param)" strokeWidth={1.2} strokeDasharray="3 2" />
       {[
@@ -116,7 +119,7 @@ export function StringDiagram({ from, to, offset, t }: { from: string; to: strin
       <path d={`M${px - 5} 8H${px + 5}M${px} 3V13`} stroke="var(--draw-param)" strokeWidth={1.6} />
       <circle cx={px} cy={8} r={6} fill="none" stroke="var(--draw-param)" strokeWidth={1} />
       <text x={-47.5} y={47.5} fontSize={5} fill="var(--draw-muted)" className="font-mono">
-        string line, not to scale
+        {t('diagrams.stringNote')}
       </text>
     </svg>
   );
@@ -138,6 +141,7 @@ export function SwingDiagram({
   db: number;
   labels: [string, string, string];
 }) {
+  const { t } = useTranslation('fieldwork');
   const box = bounds([a, b, p]);
   const w = Math.max(box.maxX - box.minX, 1);
   const h = Math.max(box.maxY - box.minY, 1);
@@ -147,12 +151,17 @@ export function SwingDiagram({
   const S = (q: Vec2) => ({ x: (q.x - cx) * k, y: -(q.y - cy) * k });
   const [A, B, P] = [S(a), S(b), S(p)];
   const arc = (c: Vec2, r: number) => {
-    const t = Math.atan2(P.y - c.y, P.x - c.x);
-    return `M${c.x + r * Math.cos(t - 0.35)} ${c.y + r * Math.sin(t - 0.35)}A${r} ${r} 0 0 1 ${c.x + r * Math.cos(t + 0.35)} ${c.y + r * Math.sin(t + 0.35)}`;
+    const th = Math.atan2(P.y - c.y, P.x - c.x);
+    return `M${c.x + r * Math.cos(th - 0.35)} ${c.y + r * Math.sin(th - 0.35)}A${r} ${r} 0 0 1 ${c.x + r * Math.cos(th + 0.35)} ${c.y + r * Math.sin(th + 0.35)}`;
   };
   const mid = (u: Vec2, v: Vec2) => ({ x: (u.x + v.x) / 2, y: (u.y + v.y) / 2 });
   return (
-    <svg viewBox="-50 -50 100 100" className="block w-full rounded-md border bg-[var(--draw-bg)]" role="img" aria-label="Two-tape set-out">
+    <svg
+      viewBox="-50 -50 100 100"
+      className="block w-full rounded-md border bg-[var(--draw-bg)]"
+      role="img"
+      aria-label={t('diagrams.swing')}
+    >
       <g stroke="var(--draw-param)" fill="none" strokeWidth={0.8}>
         <line x1={A.x} y1={A.y} x2={P.x} y2={P.y} strokeDasharray="3 2" />
         <line x1={B.x} y1={B.y} x2={P.x} y2={P.y} strokeDasharray="3 2" />

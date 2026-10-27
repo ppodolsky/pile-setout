@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { applyRigid, type RigidTransform, type Vec2 } from '@buildkit/geometry';
 import { CASTING, CONTAINERS, POCKETS, type ContainerOutline, type Pile } from '@buildkit/pile-field';
 import { Label, Poly, toScreen, useView } from '@/drawing';
@@ -15,6 +16,7 @@ const rect = (f: Frame, x0: number, y0: number, w: number, h: number): Vec2[] =>
 
 /** Container outlines with corner castings and (20′) forklift pockets. */
 export function Containers({ outlines, frame }: { outlines: readonly ContainerOutline[]; frame?: Frame }) {
+  const { t } = useTranslation('design');
   return (
     <g>
       {outlines.map((o) => {
@@ -40,7 +42,7 @@ export function Containers({ outlines, frame }: { outlines: readonly ContainerOu
                   strokeDasharray="3 2"
                   opacity={0.8}
                 >
-                  <title>Container corner casting (178 × 162)</title>
+                  <title>{t('layers.casting')}</title>
                 </Poly>
               )),
             )}
@@ -53,7 +55,7 @@ export function Containers({ outlines, frame }: { outlines: readonly ContainerOu
                     fill="var(--draw-container-stroke)"
                     opacity={0.15}
                   >
-                    <title>Forklift pocket (schematic)</title>
+                    <title>{t('layers.pocket')}</title>
                   </Poly>
                 )),
               )}

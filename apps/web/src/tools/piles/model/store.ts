@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { temporal } from 'zundo';
+import i18n from '@/i18n';
 import { uid } from '@/lib/id';
 import {
   addConstraints as addDocConstraints,
@@ -71,7 +72,7 @@ export interface SketchIdentity {
   readonly name: string;
 }
 
-export const newIdentity = (name = 'Untitled sketch'): SketchIdentity => ({ id: uid('s'), name });
+export const newIdentity = (name: string = i18n.t('project:sketch.untitled')): SketchIdentity => ({ id: uid('s'), name });
 
 export type ProjectStore = ProjectData &
   ProjectActions & { readonly sketch: SketchIdentity; rename(name: string): void; open(id: SketchIdentity, data: ProjectData): void };

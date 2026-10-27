@@ -1,5 +1,6 @@
 import { CircleDot, LandPlot, MousePointer2, PenLine, Redo2, SquareDashedMousePointer, Undo2 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
 import { CadCanvas, SelectionToolbar, useCadEditor, type CadTool } from '@/cad';
 import { Button } from '@/components/ui/button';
@@ -16,24 +17,25 @@ import { PileLayer } from './PileLayer';
 import { PileList } from './PileList';
 import { TemplateCard } from './TemplateCard';
 
-const TOOLS: { id: CadTool; name: string; icon: typeof LandPlot; key: string }[] = [
-  { id: 'select', name: 'Select & move', icon: MousePointer2, key: 'V' },
-  { id: 'pile', name: 'New pile', icon: LandPlot, key: 'P' },
-  { id: 'point', name: 'New point', icon: CircleDot, key: 'O' },
-  { id: 'line', name: 'Line (string line / axis)', icon: PenLine, key: 'L' },
-];
+/** Drawing tools; the name is `mode.tools.<id>` in the `design` namespace. */
+const TOOLS = [
+  { id: 'select', icon: MousePointer2, key: 'V' },
+  { id: 'pile', icon: LandPlot, key: 'P' },
+  { id: 'point', icon: CircleDot, key: 'O' },
+  { id: 'line', icon: PenLine, key: 'L' },
+] as const satisfies readonly { id: CadTool; icon: typeof LandPlot; key: string }[];
 
-function hint(tool: CadTool, n: number): string {
-  if (tool === 'pile' || tool === 'point')
-    return 'Click to place. It snaps to points, midpoints, other piles’ axes, round angles from the selected pile (90° is stickiest) and round distances — and keeps those relations as constraints.';
-  if (tool === 'line') return 'Click points (or empty space) one after another to draw a line; Esc to finish.';
-  if (n === 0)
-    return 'Click to select; Shift-click / box / multi-select for more. Drag to move — dimensions follow. Pan: right-drag, Space+drag or touch; zoom: wheel or pinch.';
-  return 'Constrain the selection with the buttons above (in pick order), or drag to move.';
+/** Key of the hint under the toolbar for the current tool and selection size. */
+function hint(tool: CadTool, n: number) {
+  if (tool === 'pile' || tool === 'point') return 'mode.hint.place' as const;
+  if (tool === 'line') return 'mode.hint.line' as const;
+  if (n === 0) return 'mode.hint.select' as const;
+  return 'mode.hint.constrain' as const;
 }
 
 /** Design mode: the pile plan as a CAD drawing — points, lines, constraints, piles on points. */
 export default function DesignMode() {
+  const { t } = useTranslation('design');
   const model = useDesign();
   const ops = usePileOps();
   const outlines = useOutlines();
@@ -87,8 +89,8 @@ export default function DesignMode() {
           selectConstraint(null);
         }
       } else {
-        const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
-        if (t) setTool(t.id);
+        const next = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
+        if (next) setTool(next.id);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -99,45 +101,52 @@ export default function DesignMode() {
     <div className="mx-auto grid h-full max-w-[1600px] gap-4 p-3 sm:p-5 lg:grid-cols-[minmax(0,1fr)_400px]">
       <section className="flex min-h-[64vh] flex-col gap-2 lg:min-h-0">
         <div className="flex flex-wrap items-center gap-2">
-          <ToggleGroup type="single" variant="outline" value={tool} onValueChange={(t) => t && setTool(t)} aria-label="Drawing tool">
-            {TOOLS.map((t) => (
-              <Tooltip key={t.id}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={tool}
+            onValueChange={(id) => id && setTool(id)}
+            aria-label={t('mode.drawingTool')}
+          >
+            {TOOLS.map((tl) => (
+              <Tooltip key={tl.id}>
                 <TooltipTrigger asChild>
-                  <ToggleGroupItem value={t.id} aria-label={t.name} className="px-3">
-                    <t.icon />
+                  <ToggleGroupItem value={tl.id} aria-label={t(`mode.tools.${tl.id}`)} className="px-3">
+                    <tl.icon />
                   </ToggleGroupItem>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {t.name} <kbd className="ml-1 font-mono opacity-70">{t.key}</kbd>
+                  {t(`mode.tools.${tl.id}`)} <kbd className="ml-1 font-mono opacity-70">{tl.key}</kbd>
                 </TooltipContent>
               </Tooltip>
             ))}
           </ToggleGroup>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Toggle variant="outline" pressed={multi} onPressedChange={setMulti} aria-label="Multi-select" className="px-3">
+              <Toggle variant="outline" pressed={multi} onPressedChange={setMulti} aria-label={t('mode.multiSelect')} className="px-3">
                 <SquareDashedMousePointer />
               </Toggle>
             </TooltipTrigger>
-            <TooltipContent>Multi-select: taps add or remove (same as Shift-click)</TooltipContent>
+            <TooltipContent>{t('mode.multiSelectHint')}</TooltipContent>
           </Tooltip>
           <div className="flex">
-            <Button variant="ghost" size="icon" onClick={() => undo()} disabled={!pastStates.length} aria-label="Undo">
+            <Button variant="ghost" size="icon" onClick={() => undo()} disabled={!pastStates.length} aria-label={t('mode.undo')}>
               <Undo2 />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => redo()} disabled={!futureStates.length} aria-label="Redo">
+            <Button variant="ghost" size="icon" onClick={() => redo()} disabled={!futureStates.length} aria-label={t('mode.redo')}>
               <Redo2 />
             </Button>
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch checked={showConstraints} onCheckedChange={(v) => useProject.getState().setView({ showConstraints: v })} /> constraints
+            <Switch checked={showConstraints} onCheckedChange={(v) => useProject.getState().setView({ showConstraints: v })} />{' '}
+            {t('mode.showConstraints')}
           </label>
           <SelectionToolbar model={model} ops={ops} />
         </div>
-        <p className="text-xs text-muted-foreground">{message ?? hint(tool, selection.length)}</p>
+        <p className="text-xs text-muted-foreground">{message ?? t(hint(tool, selection.length))}</p>
         <div className="min-h-0 flex-1 rounded-xl border bg-card p-1 shadow-sm">
           <CadCanvas
-            label="Pile design"
+            label={t('mode.canvas')}
             model={model}
             ops={ops}
             extent={extent}

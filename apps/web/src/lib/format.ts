@@ -19,7 +19,6 @@ export function sfmt(v: number, digits = 1): string {
   return (v >= 0 ? '+' : '−') + fmt(Math.abs(v), digits);
 }
 
-
 /** Parses user input; accepts a decimal comma. */
 export function parseNum(s: string): number | null {
   const v = Number.parseFloat(s.replace(',', '.'));

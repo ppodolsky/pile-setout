@@ -1,17 +1,20 @@
 import { useFieldworkUi } from './ui';
 import type { Pile } from '@buildkit/pile-field';
 
-/** Along the row / across / diagonal, from the design positions. */
-export function pairKind(piles: readonly Pile[], a: string, b: string): string {
+/** How two piles lie relative to each other; the words are `fieldwork:pair.<kind>`. */
+export type PairKind = 'along' | 'across' | 'diagonal';
+
+/** Along the row / across / diagonal, from the design positions (null if a pile is missing). */
+export function pairKind(piles: readonly Pile[], a: string, b: string): PairKind | null {
   const pa = piles.find((p) => p.id === a);
   const pb = piles.find((p) => p.id === b);
-  if (!pa || !pb) return '';
-  if (Math.abs(pa.y - pb.y) < 0.6) return 'along the row';
+  if (!pa || !pb) return null;
+  if (Math.abs(pa.y - pb.y) < 0.6) return 'along';
   if (Math.abs(pa.x - pb.x) < 0.6) return 'across';
   return 'diagonal';
 }
 
-/** Names of the four field sides by the piles on them (as seen on the plan, Y up). */
+/** Names of the four field sides by the piles on them (as seen on the plan, Y up) — pile labels only, no words. */
 export function sideNames(piles: readonly Pile[]): Record<'x+' | 'x-' | 'y+' | 'y-', string> {
   if (!piles.length) return { 'x+': '', 'x-': '', 'y+': '', 'y-': '' };
   const xs = piles.map((p) => p.x);

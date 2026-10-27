@@ -1,20 +1,23 @@
 import { Copy, FilePlus2, FolderOpen, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SketchMeta } from '@/app/library';
 import { useCadEditor } from '@/cad';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { currentLocale } from '@/i18n';
 import { uid } from '@/lib/id';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/app/backend/auth';
-import { duplicateSketch, openSketch, saveCurrent, sketchStore, TOOL_ID } from './model/library';
+import { duplicateSketch, openSketch, saveCurrent, sketchStore, summaryCounts, TOOL_ID } from './model/library';
 import { useProject } from './model/store';
 
-const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const when = (t: number) => new Date(t).toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 
 /** The sketch library: rename the current sketch, open / duplicate / delete others, start a new one. */
 export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useTranslation('project');
   const current = useProject((s) => s.sketch);
   const account = useAuth((s) => s.account);
   const [items, setItems] = useState<SketchMeta[]>([]);
@@ -25,22 +28,23 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
   useEffect(() => {
     if (open) void refresh();
   }, [open, current, account]);
+  /** The stored summary, translated when it is in the known form. */
+  const summaryText = (m: SketchMeta) => {
+    const c = summaryCounts(m.summary);
+    return c ? `${t('sketch.piles', { count: c.piles })} · ${t('sketch.readings', { count: c.readings })}` : m.summary;
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Sketches</SheetTitle>
-          <SheetDescription>
-            {account
-              ? `Saved automatically and synced to ${account.email}.`
-              : 'Saved automatically in this browser. Sign in to sync across devices, or export a file.'}
-          </SheetDescription>
+          <SheetTitle>{t('library.title')}</SheetTitle>
+          <SheetDescription>{account ? t('library.synced', { email: account.email }) : t('library.local')}</SheetDescription>
         </SheetHeader>
         <div className="space-y-4 overflow-y-auto px-4 pb-6">
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="sketch-name">
-              This sketch
+              {t('library.thisSketch')}
             </label>
             <Input id="sketch-name" value={current.name} onChange={(e) => useProject.getState().rename(e.target.value)} />
           </div>
@@ -54,7 +58,7 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
               await refresh();
             }}
           >
-            <FilePlus2 /> New sketch
+            <FilePlus2 /> {t('sketch.newSketch')}
           </Button>
           <ul className="divide-y rounded-lg border">
             {items.map((m) => (
@@ -70,17 +74,17 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                   }}
                 >
                   <div className="truncate text-sm font-medium">
-                    {m.name || 'Untitled'}{' '}
-                    {m.id === current.id && <span className="text-xs font-normal text-muted-foreground">(open)</span>}
+                    {m.name || t('sketch.untitledShort')}{' '}
+                    {m.id === current.id && <span className="text-xs font-normal text-muted-foreground">{t('library.current')}</span>}
                   </div>
                   <div className="truncate text-xs text-muted-foreground">
-                    {m.summary} · {when(m.updatedAt)}
+                    {[summaryText(m), when(m.updatedAt)].filter(Boolean).join(' · ')}
                   </div>
                 </button>
                 <Button
                   size="icon"
                   variant="ghost"
-                  aria-label={`Open ${m.name}`}
+                  aria-label={t('library.open', { name: m.name })}
                   onClick={async () => {
                     await openSketch(m.id);
                     useCadEditor.getState().select([]);
@@ -93,7 +97,7 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                 <Button
                   size="icon"
                   variant="ghost"
-                  aria-label={`Duplicate ${m.name}`}
+                  aria-label={t('library.duplicate', { name: m.name })}
                   onClick={async () => {
                     await duplicateSketch(m.id, uid('s'));
                     await refresh();
@@ -104,11 +108,11 @@ export function LibrarySheet({ open, onOpenChange }: { open: boolean; onOpenChan
                 <Button
                   size="icon"
                   variant="ghost"
-                  aria-label={`Delete ${m.name}`}
+                  aria-label={t('library.delete', { name: m.name })}
                   className="text-muted-foreground hover:text-destructive"
                   disabled={m.id === current.id}
                   onClick={async () => {
-                    if (!confirm(`Delete “${m.name}”? This cannot be undone.`)) return;
+                    if (!confirm(t('library.confirmDelete', { name: m.name }))) return;
                     await sketchStore().remove(m.id);
                     await refresh();
                   }}

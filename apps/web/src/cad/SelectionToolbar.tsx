@@ -1,13 +1,15 @@
 import { CirclePlus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { selectionActions, type Element } from '@buildkit/cad';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCadEditor } from './editor';
-import { ACTION_ICON } from './meta';
+import { ACTION_ICON, actionText } from './meta';
 import type { CadModel, CadOps } from './ops';
 
 /** Constraint / create buttons for the current selection (points and lines, in pick order). */
 export function SelectionToolbar<E extends Element>({ model, ops }: { model: CadModel<E>; ops: CadOps }) {
+  const { t } = useTranslation('cad');
   const { selection, select, say } = useCadEditor();
   const points = selection.flatMap((r) => (r.kind === 'point' ? model.doc.points.filter((p) => p.id === r.id) : []));
   const lines = selection.flatMap((r) => (r.kind === 'line' ? model.doc.lines.filter((l) => l.id === r.id) : []));
@@ -18,6 +20,7 @@ export function SelectionToolbar<E extends Element>({ model, ops }: { model: Cad
     <div className="flex flex-wrap items-center gap-1">
       {actions.map((a) => {
         const Icon = ACTION_ICON[a.id] ?? CirclePlus;
+        const text = actionText(a, t);
         return (
           <Tooltip key={a.id}>
             <TooltipTrigger asChild>
@@ -33,18 +36,18 @@ export function SelectionToolbar<E extends Element>({ model, ops }: { model: Cad
                   const { added, redundant } = ops.addConstraints(a.constraints!(ctx));
                   say(
                     !added.length
-                      ? 'Nothing added — already determined by other constraints.'
+                      ? t('added.nothing')
                       : redundant
-                        ? `Added ${added.length}; ${redundant} already determined by other constraints.`
+                        ? t('added.someRedundant', { added: String(added.length), redundant: String(redundant) })
                         : null,
                   );
                 }}
               >
                 <Icon className="size-3.5" />
-                {a.name}
+                {text.name}
               </Button>
             </TooltipTrigger>
-            <TooltipContent className="max-w-60">{a.hint}</TooltipContent>
+            <TooltipContent className="max-w-60">{text.hint}</TooltipContent>
           </Tooltip>
         );
       })}

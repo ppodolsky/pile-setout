@@ -1,10 +1,11 @@
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { awaitsRemeasure, fractionWords, needsMove, type Correction, type Pile, type Plan, type SetoutStep } from '@buildkit/pile-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { fmt, plural, sfmt } from '@/lib/format';
+import { fmt, sfmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { MiniMap, MoveDiagram, StringDiagram, SwingDiagram } from '../drawing/cards';
 import { pileLabel, useFieldwork } from '../model/derived';
@@ -28,30 +29,55 @@ function Note({ tone = 'info', children }: { tone?: 'info' | 'ok' | 'warn' | 'er
   );
 }
 
+const bold = { b: <b /> };
+const mono = { b: <b className="font-mono" /> };
+
+/** `fractionWords` (English words from the domain package) → its key under `movePlan.setout.fractions`. */
+const FRACTION_KEYS = {
+  half: 'half',
+  'a quarter': 'quarter',
+  'three quarters': 'threeQuarters',
+  'a third': 'third',
+  'two thirds': 'twoThirds',
+} as const;
+
+function fractionKey(t: number): (typeof FRACTION_KEYS)[keyof typeof FRACTION_KEYS] | null {
+  const words = fractionWords(t);
+  return words && words in FRACTION_KEYS ? FRACTION_KEYS[words as keyof typeof FRACTION_KEYS] : null;
+}
+
 function Summary({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
+  const { t } = useTranslation('fieldwork');
   const L = (id: string) => pileLabel(piles, id);
   switch (plan.status) {
     case 'empty':
-      return <Note>Enter tape measurements between the piles — the move plan appears here.</Note>;
+      return <Note>{t('movePlan.summary.empty')}</Note>;
     case 'under':
       return (
         <Note tone="warn">
-          <b>Not enough measurements yet:</b> {plan.rank} of {plan.need} independent ones. Follow “Next to measure”.
+          <Trans t={t} i18nKey="movePlan.summary.under" values={{ rank: plan.rank, need: plan.need }} components={bold} />
         </Note>
       );
     case 'contradictory':
       return (
         <Note tone="err">
-          <b>The readings contradict each other.</b> Check {L(plan.worst.a)}–{L(plan.worst.b)} first (looks about {sfmt(plan.worst.blunder)}{' '}
-          mm off)
-          {plan.alike.length > 1 ? `; ${plan.alike.length} readings are equally suspect with this few checks` : ''}. No move plan until they
-          agree.
+          <Trans
+            t={t}
+            i18nKey="movePlan.summary.contradictory"
+            values={{
+              a: L(plan.worst.a),
+              b: L(plan.worst.b),
+              error: sfmt(plan.worst.blunder),
+              alike: plan.alike.length > 1 ? t('movePlan.summary.alike', { count: plan.alike.length }) : '',
+            }}
+            components={bold}
+          />
         </Note>
       );
     case 'pinconflict':
       return (
         <Note tone="warn">
-          <b>Pinned piles disagree with the measurements</b> — check the readings involving them or unpin them.
+          <Trans t={t} i18nKey="movePlan.summary.pinConflict" components={bold} />
         </Note>
       );
     case 'ok': {
@@ -59,19 +85,14 @@ function Summary({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
       if (!n)
         return (
           <Note tone="ok">
-            <b>All measured piles are within tolerance.</b>
-            {plan.derived.length ? ' Then set out the others from them, in the numbered order.' : ' No moves needed.'}
+            <b>{t('movePlan.summary.allWithin')}</b>
+            {plan.derived.length ? t('movePlan.summary.thenOthers') : t('movePlan.summary.noMoves')}
           </Note>
         );
       return (
         <Note>
-          <b>
-            {n} {plural(n, 'move')}
-          </b>{' '}
-          out of {plan.measured.length} measured piles — move each orange pile once, onto the cross, in the numbered order (largest first).
-          {plan.derived.length
-            ? ` Then set out the other ${plan.derived.length} ${plural(plan.derived.length, 'pile')} in their numbered order, from piles already in place.`
-            : ''}
+          <Trans t={t} i18nKey="movePlan.summary.moves" count={n} values={{ measured: plan.measured.length }} components={bold} />
+          {plan.derived.length ? t('movePlan.summary.thenDerived', { count: plan.derived.length }) : ''}
         </Note>
       );
     }
@@ -93,6 +114,7 @@ function MoveCard({
   measured: readonly Pile[];
   tol: number;
 }) {
+  const { t } = useTranslation(['fieldwork', 'common']);
   const pinned = useProject((s) => s.fieldwork.pinned.includes(pile.id));
   // stays "moved" (with its re-measure button) until its readings are taken again
   const moved = useProject((s) => s.fieldwork.moved?.includes(pile.id) ?? false);
@@ -115,7 +137,8 @@ function MoveCard({
           <span
             className={cn('w-full font-mono text-xs font-semibold', moving ? (c.offset <= 3 * tol ? 'text-warn' : 'text-err') : 'text-ok')}
           >
-            {moving ? `${fmt(c.offset)} mm` : `✓ ${fmt(c.offset)} mm`}
+            {moving ? '' : '✓ '}
+            {fmt(c.offset)} {t('common:mm')}
           </span>
         )}
       </div>
@@ -123,27 +146,27 @@ function MoveCard({
         <>
           <MoveDiagram dx={c.dx} dy={c.dy} offset={c.offset} tolerance={tol} moving={moving} />
           <div className="min-h-[2.6em] space-y-0.5 text-sm">
-            {!moving && <div className="text-ok">within tolerance — leave it</div>}
+            {!moving && <div className="text-ok">{t('movePlan.move.within')}</div>}
             {moving && Math.abs(c.dx) >= 0.5 && (
               <div>
                 <span className="inline-block w-5 font-bold text-move">{c.dx > 0 ? '→' : '←'}</span>
-                <b className="font-mono">{fmt(Math.abs(c.dx))}</b> mm{' '}
-                <span className="text-xs text-muted-foreground">toward {sides[c.dx > 0 ? 'x+' : 'x-']}</span>
+                <b className="font-mono">{fmt(Math.abs(c.dx))}</b> {t('common:mm')}{' '}
+                <span className="text-xs text-muted-foreground">{t('movePlan.move.toward', { side: sides[c.dx > 0 ? 'x+' : 'x-'] })}</span>
               </div>
             )}
             {moving && Math.abs(c.dy) >= 0.5 && (
               <div>
                 <span className="inline-block w-5 font-bold text-move">{c.dy > 0 ? '↑' : '↓'}</span>
-                <b className="font-mono">{fmt(Math.abs(c.dy))}</b> mm{' '}
-                <span className="text-xs text-muted-foreground">toward {sides[c.dy > 0 ? 'y+' : 'y-']}</span>
+                <b className="font-mono">{fmt(Math.abs(c.dy))}</b> {t('common:mm')}{' '}
+                <span className="text-xs text-muted-foreground">{t('movePlan.move.toward', { side: sides[c.dy > 0 ? 'y+' : 'y-'] })}</span>
               </div>
             )}
           </div>
         </>
       ) : (
-        <div className="py-6 text-center text-sm text-muted-foreground">no plan yet</div>
+        <div className="py-6 text-center text-sm text-muted-foreground">{t('movePlan.move.noPlan')}</div>
       )}
-      {pile.shared && <div className="text-xs font-semibold text-primary">shared joint pile</div>}
+      {pile.shared && <div className="text-xs font-semibold text-primary">{t('movePlan.move.shared')}</div>}
       {(moving || moved) && <MovedActions pileId={pile.id} />}
       <button
         className={cn(
@@ -151,9 +174,9 @@ function MoveCard({
           pinned ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:border-primary hover:text-primary',
         )}
         onClick={() => togglePin(pile.id)}
-        title="Pinned piles are treated as exact references"
+        title={t('movePlan.move.pinTitle')}
       >
-        {pinned ? 'pinned' : 'pin'}
+        {pinned ? t('movePlan.move.pinned') : t('movePlan.move.pin')}
       </button>
     </div>
   );
@@ -164,13 +187,14 @@ function MoveCard({
  * jumps straight to them (switching to the Measure panel on phones).
  */
 function MovedActions({ pileId }: { pileId: string }) {
+  const { t } = useTranslation('fieldwork');
   const moved = useProject((s) => s.fieldwork.moved?.includes(pileId) ?? false);
   const measurements = useProject((s) => s.fieldwork.measurements);
   const waiting = measurements.filter((m) => (m.a === pileId || m.b === pileId) && awaitsRemeasure(m));
   if (!moved)
     return (
       <Button size="sm" className="w-full" onClick={() => useProject.getState().markMoved(pileId)}>
-        <Check /> I moved it
+        <Check /> {t('movePlan.move.movedIt')}
       </Button>
     );
   return (
@@ -181,40 +205,47 @@ function MovedActions({ pileId }: { pileId: string }) {
       onClick={() => waiting[0] && focusReading(waiting[0].id)}
       disabled={!waiting.length}
     >
-      Re-measure {waiting.length} {plural(waiting.length, 'reading')} <ArrowRight />
+      {t('movePlan.move.remeasure', { count: waiting.length })} <ArrowRight />
     </Button>
   );
 }
 
 function SetoutCard({ step, piles }: { step: SetoutStep; piles: readonly Pile[] }) {
+  const { t } = useTranslation('fieldwork');
   const { pile, instruction: ins, order } = step;
+  const fraction = ins?.kind === 'string' ? fractionKey(ins.t) : null;
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed bg-card p-2.5 shadow-[inset_0_3px_0_var(--primary)]">
       <div className="flex items-center gap-2">
         <span
           className="grid size-6 place-items-center rounded-full border border-primary text-xs font-bold text-primary"
-          title="Set-out order"
+          title={t('movePlan.setout.orderTitle')}
         >
           {order}
         </span>
         <span className="font-mono font-bold">{pile.label}</span>
         <MiniMap piles={piles} highlight={[pile.id]} className="ml-auto" />
-        <span className="text-xs font-semibold text-primary">set</span>
+        <span className="text-xs font-semibold text-primary">{t('setTag')}</span>
       </div>
       {ins?.kind === 'string' && (
         <>
           <StringDiagram from={ins.from.label} to={ins.to.label} offset={ins.offset} t={ins.t} />
           <div className="text-sm">
-            On the string{' '}
-            <b className="font-mono">
-              {ins.from.label} → {ins.to.label}
-            </b>
-            , <b className="font-mono">{fmt(ins.offset, 0)}</b> mm from {ins.from.label}
+            <Trans
+              t={t}
+              i18nKey="movePlan.setout.onString"
+              values={{ from: ins.from.label, to: ins.to.label, offset: fmt(ins.offset, 0) }}
+              components={mono}
+            />
             <span className="text-xs text-muted-foreground">
               {' '}
-              {fractionWords(ins.t)
-                ? `(${fractionWords(ins.t)} of ${ins.from.label}–${ins.to.label})`
-                : `(${fmt(ins.rest, 0)} mm from ${ins.to.label})`}
+              {fraction
+                ? t('movePlan.setout.fraction', {
+                    fraction: t(`movePlan.setout.fractions.${fraction}`),
+                    from: ins.from.label,
+                    to: ins.to.label,
+                  })
+                : t('movePlan.setout.rest', { rest: fmt(ins.rest, 0), to: ins.to.label })}
             </span>
           </div>
         </>
@@ -223,21 +254,21 @@ function SetoutCard({ step, piles }: { step: SetoutStep; piles: readonly Pile[] 
         <>
           <SwingDiagram a={ins.a} b={ins.b} p={pile} da={ins.da} db={ins.db} labels={[ins.a.label, ins.b.label, pile.label]} />
           <div className="text-sm">
-            Swing two tapes: <b className="font-mono">{fmt(ins.da, 0)}</b> mm from {ins.a.label} and{' '}
-            <b className="font-mono">{fmt(ins.db, 0)}</b> mm from {ins.b.label}
+            <Trans
+              t={t}
+              i18nKey="movePlan.setout.swing"
+              values={{ da: fmt(ins.da, 0), a: ins.a.label, db: fmt(ins.db, 0), b: ins.b.label }}
+              components={mono}
+            />
             <span className="text-xs text-muted-foreground">
               {' '}
-              — the crossing on the {ins.side} of {ins.a.label} → {ins.b.label}
+              {t(`movePlan.setout.crossing.${ins.side}`, { a: ins.a.label, b: ins.b.label })}
             </span>
           </div>
         </>
       )}
-      {!ins && (
-        <div className="py-4 text-sm text-muted-foreground">
-          No two piles in place to set it from yet — mark it “Measure it” in Design, or tie it to measured piles.
-        </div>
-      )}
-      <div className="mt-auto text-xs font-semibold text-primary">after the moves, from piles already in place</div>
+      {!ins && <div className="py-4 text-sm text-muted-foreground">{t('movePlan.setout.noRefs')}</div>}
+      <div className="mt-auto text-xs font-semibold text-primary">{t('movePlan.setout.after')}</div>
     </div>
   );
 }
@@ -296,6 +327,7 @@ function CardsGrid({ plan, piles, setout }: { plan: Plan; piles: readonly Pile[]
 }
 
 function Notes({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
+  const { t } = useTranslation('fieldwork');
   const measurements = useProject((s) => s.fieldwork.measurements);
   const tol = useProject((s) => s.fieldwork.tolerance);
   if (plan.status !== 'ok') return null;
@@ -307,52 +339,45 @@ function Notes({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
     <div className="space-y-2.5">
       {first && affected.length > 0 && (
         <Note>
-          <b>After moving {L(first.id)}</b>, re-measure <span className="font-mono">{affected.join(', ')}</span> and update the readings —
-          the plan recalculates.
+          <Trans
+            t={t}
+            i18nKey="movePlan.notes.afterMoving"
+            values={{ pile: L(first.id), pairs: affected.join(', ') }}
+            components={{ b: <b />, mono: <span className="font-mono" /> }}
+          />
         </Note>
       )}
       {plan.moves.length > 0 &&
         (plan.moves.length === plan.lowerBound ? (
-          <Note tone="ok">
-            Minimality proven: the conflicting pairs need at least {plan.lowerBound} {plural(plan.lowerBound, 'move')} — no shorter plan
-            exists.
-          </Note>
+          <Note tone="ok">{t('movePlan.notes.lowerBound', { count: plan.lowerBound })}</Note>
         ) : plan.placement.proven ? (
-          <Note tone="ok">Minimality proven by an exhaustive search over the field’s rotation.</Note>
+          <Note tone="ok">{t('movePlan.notes.proven')}</Note>
         ) : (
-          <Note>The optimality check did not finish: the plan may not be the shortest. Re-check the readings.</Note>
+          <Note>{t('movePlan.notes.notFinished')}</Note>
         ))}
-      {shift > 3 * tol && (
-        <Note>
-          The plan is computed in the field’s own frame: a shift or turn of the whole field is invisible to pile-to-pile measurements and
-          needs no correction. If the position relative to the string lines matters, pin two piles set exactly on the axes.
-        </Note>
-      )}
-      {plan.extraMovesFromPins > 0 && (
-        <Note tone="warn">
-          Pinned piles add {plan.extraMovesFromPins} {plural(plan.extraMovesFromPins, 'move')} — make sure they really are exact.
-        </Note>
-      )}
+      {shift > 3 * tol && <Note>{t('movePlan.notes.ownFrame')}</Note>}
+      {plan.extraMovesFromPins > 0 && <Note tone="warn">{t('movePlan.notes.pinsAdd', { count: plan.extraMovesFromPins })}</Note>}
     </div>
   );
 }
 
 function NumbersTable({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
+  const { t } = useTranslation('fieldwork');
   if (plan.status !== 'ok') return null;
   const tol = useProject.getState().fieldwork.tolerance;
   return (
     <Collapsible>
       <CollapsibleTrigger className="group flex items-center gap-1 text-sm text-muted-foreground">
-        <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" /> Numbers
+        <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" /> {t('movePlan.numbers.title')}
       </CollapsibleTrigger>
       <CollapsibleContent>
         <table className="mt-2 w-full text-sm">
           <thead className="text-left text-xs text-muted-foreground uppercase">
             <tr>
-              <th className="py-1 font-medium">Pile</th>
+              <th className="py-1 font-medium">{t('movePlan.numbers.pile')}</th>
               <th className="font-medium">ΔX</th>
               <th className="font-medium">ΔY</th>
-              <th className="font-medium">Offset</th>
+              <th className="font-medium">{t('movePlan.numbers.offset')}</th>
             </tr>
           </thead>
           <tbody className="font-mono">
@@ -374,24 +399,25 @@ function NumbersTable({ plan, piles }: { plan: Plan; piles: readonly Pile[] }) {
 }
 
 export function MovePlanCard() {
+  const { t } = useTranslation('fieldwork');
   const { plan, piles, setout } = useFieldwork();
   return (
     <Card className="gap-4 py-4">
       <CardHeader className="px-4">
-        <CardTitle>Move plan</CardTitle>
+        <CardTitle>{t('movePlan.title')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-4">
         <Summary plan={plan} piles={piles} />
         {plan.status === 'ok' && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-move" /> stake now
+              <span className="size-2.5 rounded-full bg-move" /> {t('movePlan.legend.stakeNow')}
             </span>
-            <span>+ design position</span>
+            <span>{t('movePlan.legend.design')}</span>
             <span className="flex items-center gap-1.5">
-              <span className="size-3 rounded-full border border-dashed border-ok bg-ok/10" /> tolerance
+              <span className="size-3 rounded-full border border-dashed border-ok bg-ok/10" /> {t('movePlan.legend.tolerance')}
             </span>
-            <span>Diagrams use the plan’s orientation (Y up).</span>
+            <span>{t('movePlan.legend.orientation')}</span>
           </div>
         )}
         <CardsGrid plan={plan} piles={piles} setout={setout} />

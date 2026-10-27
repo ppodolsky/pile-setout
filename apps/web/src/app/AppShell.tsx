@@ -1,4 +1,5 @@
 import { Languages, Monitor, Moon, Sun } from 'lucide-react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,10 @@ export function AppShell() {
   const [theme, setTheme] = useTheme();
   const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
   const ProjectMenu = tool.ProjectMenu;
+  const toolName = t(`tools.${tool.id}.name` as 'tools.piles.name', { defaultValue: tool.name });
+  useEffect(() => {
+    document.title = `${toolName} — ${t('app')}`;
+  }, [toolName, t]);
 
   return (
     <div className="flex h-full flex-col">
@@ -31,7 +36,7 @@ export function AppShell() {
           <div className="flex min-w-0 items-center gap-2.5">
             <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="size-7 rounded-md" />
             <div className="hidden min-w-0 leading-tight sm:block">
-              <div className="truncate text-sm font-semibold">{t(`tools.${tool.id}.name` as 'tools.piles.name', { defaultValue: tool.name })}</div>
+              <div className="truncate text-sm font-semibold">{toolName}</div>
               <div className="text-xs text-muted-foreground">{t('app')}</div>
             </div>
           </div>

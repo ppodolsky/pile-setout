@@ -1,4 +1,5 @@
 import { CircleCheck, CircleDashed, LandPlot, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { constraintPoints } from '@buildkit/sketch';
 import { ConstraintRow, useCadEditor, type CadOps } from '@/cad';
 import { NumberInput } from '@/components/number-input';
@@ -8,12 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { fmt, plural } from '@/lib/format';
+import { fmt } from '@/lib/format';
 import { useDesign } from '../model/derived';
 import { useProject } from '../model/store';
 
 /** Properties of the selection — pile, point or line, and their constraints — or of a constraint. */
 export function Inspector({ ops }: { ops: CadOps }) {
+  const { t } = useTranslation(['design', 'common']);
   const { doc, piles, status, labelOf } = useDesign();
   const { selection, constraint, select } = useCadEditor();
   const { updatePile, addPileOn } = useProject.getState();
@@ -26,7 +28,7 @@ export function Inspector({ ops }: { ops: CadOps }) {
     return (
       <Card className="gap-3 py-4">
         <CardHeader className="px-4">
-          <CardTitle>Constraint</CardTitle>
+          <CardTitle>{t('inspector.constraint')}</CardTitle>
         </CardHeader>
         <CardContent className="px-3">
           <ul>{row(picked)}</ul>
@@ -39,19 +41,18 @@ export function Inspector({ ops }: { ops: CadOps }) {
       <Card className="gap-2 py-4">
         <CardHeader className="px-4">
           <CardTitle className="flex items-center gap-2">
-            Plan
+            {t('inspector.plan')}
             {status.conflicts.size ? (
-              <Badge variant="destructive">{status.conflicts.size} conflicting</Badge>
+              <Badge variant="destructive">{t('inspector.conflicting', { count: status.conflicts.size })}</Badge>
             ) : status.dof === 0 ? (
-              <Badge className="bg-ok/15 text-ok">fully constrained</Badge>
+              <Badge className="bg-ok/15 text-ok">{t('inspector.fullyConstrained')}</Badge>
             ) : (
-              <Badge className="bg-[color-mix(in_oklch,var(--draw-free)_15%,transparent)] text-[var(--draw-free)]">{status.dof} free</Badge>
+              <Badge className="bg-[color-mix(in_oklch,var(--draw-free)_15%,transparent)] text-[var(--draw-free)]">
+                {t('inspector.free', { count: status.dof })}
+              </Badge>
             )}
           </CardTitle>
-          <CardDescription>
-            Click a pile, point or line to select it — Shift-click or drag a box for more, then constrain from the toolbar. Drag to move:
-            dimensions follow. Click a value on the drawing to edit it. Blue = can still move; black = fully constrained.
-          </CardDescription>
+          <CardDescription>{t('inspector.planHelp')}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -67,33 +68,42 @@ export function Inspector({ ops }: { ops: CadOps }) {
   const onePoint = selection.length === 1 && pointIds.length === 1 ? doc.points.find((p) => p.id === pointIds[0]) : undefined;
   const oneLine = selection.length === 1 && lineIds.length === 1 ? doc.lines.find((l) => l.id === lineIds[0]) : undefined;
   const pile = onePoint ? piles.find((p) => p.point === onePoint.id) : undefined;
-  const title = pile ? `Pile ${pile.label}` : onePoint ? 'Point' : oneLine ? 'Line' : `${selection.length} selected`;
+  const title = pile
+    ? t('inspector.pile', { label: pile.label })
+    : onePoint
+      ? t('inspector.point')
+      : oneLine
+        ? t('inspector.line')
+        : t('inspector.selected', { n: String(selection.length) });
+  const pointName = (id: string) => labelOf(id) || t('inspector.pointItem');
 
   return (
     <Card className="gap-4 py-4">
       <CardHeader className="px-4">
         <CardTitle className="flex flex-wrap items-center gap-2">
           {title}
-          {pile?.shared && <Badge variant="secondary">shared joint</Badge>}
+          {pile?.shared && <Badge variant="secondary">{t('inspector.sharedJoint')}</Badge>}
           {onePoint &&
             (status.determined.has(onePoint.id) ? (
               <span className="flex items-center gap-1 text-xs font-normal text-ok">
-                <CircleCheck className="size-3.5" /> fully constrained
+                <CircleCheck className="size-3.5" /> {t('inspector.fullyConstrained')}
               </span>
             ) : (
               <span className="flex items-center gap-1 text-xs font-normal text-[var(--draw-free)]">
-                <CircleDashed className="size-3.5" /> can still move
+                <CircleDashed className="size-3.5" /> {t('inspector.canStillMove')}
               </span>
             ))}
         </CardTitle>
         {selection.length > 1 && (
           <CardDescription>
-            Picked in this order: {selection.map((r) => (r.kind === 'point' ? labelOf(r.id) || 'point' : 'line')).join(', ')}
+            {t('inspector.pickedOrder', {
+              list: selection.map((r) => (r.kind === 'point' ? pointName(r.id) : t('inspector.lineItem'))).join(', '),
+            })}
           </CardDescription>
         )}
         {oneLine && (
           <CardDescription className="font-mono">
-            {labelOf(oneLine.a) || 'point'} → {labelOf(oneLine.b) || 'point'} ·{' '}
+            {pointName(oneLine.a)} → {pointName(oneLine.b)} ·{' '}
             {fmt(
               Math.hypot(
                 ...(['x', 'y'] as const).map(
@@ -102,7 +112,7 @@ export function Inspector({ ops }: { ops: CadOps }) {
               ),
               0,
             )}{' '}
-            mm
+            {t('common:mm')}
           </CardDescription>
         )}
       </CardHeader>
@@ -110,7 +120,7 @@ export function Inspector({ ops }: { ops: CadOps }) {
         {onePoint && (
           <div className="grid grid-cols-[1fr_1fr_1fr] gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="pile-label">Label</Label>
+              <Label htmlFor="pile-label">{t('inspector.label')}</Label>
               {pile ? (
                 <Input
                   id="pile-label"
@@ -123,11 +133,11 @@ export function Inspector({ ops }: { ops: CadOps }) {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label>X, mm</Label>
+              <Label>{t('inspector.x')}</Label>
               <NumberInput value={onePoint.x} onValue={(x) => x != null && ops.setPointPosition(onePoint.id, { x, y: onePoint.y })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Y, mm</Label>
+              <Label>{t('inspector.y')}</Label>
               <NumberInput value={onePoint.y} onValue={(y) => y != null && ops.setPointPosition(onePoint.id, { x: onePoint.x, y })} />
             </div>
           </div>
@@ -136,11 +146,11 @@ export function Inspector({ ops }: { ops: CadOps }) {
           <>
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1.5">
-                <Label>Head, mm</Label>
+                <Label>{t('inspector.head')}</Label>
                 <NumberInput value={pile.head} min={10} onValue={(head) => head != null && updatePile(pile.id, { head })} />
               </div>
               <div className="space-y-1.5">
-                <Label>Diameter, mm</Label>
+                <Label>{t('inspector.diameter')}</Label>
                 <NumberInput
                   value={pile.diameter ?? null}
                   allowEmpty
@@ -150,7 +160,7 @@ export function Inspector({ ops }: { ops: CadOps }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Depth, mm</Label>
+                <Label>{t('inspector.depth')}</Label>
                 <NumberInput
                   value={pile.depth ?? null}
                   allowEmpty
@@ -161,7 +171,7 @@ export function Inspector({ ops }: { ops: CadOps }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>In field work</Label>
+              <Label>{t('inspector.inFieldWork')}</Label>
               <ToggleGroup
                 type="single"
                 variant="outline"
@@ -170,10 +180,10 @@ export function Inspector({ ops }: { ops: CadOps }) {
                 onValueChange={(v) => v && updatePile(pile.id, { setout: v as 'measure' | 'derive' })}
               >
                 <ToggleGroupItem value="measure" className="flex-1 text-xs">
-                  Measure it
+                  {t('inspector.measure')}
                 </ToggleGroupItem>
                 <ToggleGroupItem value="derive" className="flex-1 text-xs">
-                  Set out from neighbours
+                  {t('inspector.derive')}
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -181,18 +191,19 @@ export function Inspector({ ops }: { ops: CadOps }) {
         )}
         {onePoint && !pile && (
           <Button variant="outline" size="sm" className="w-full" onClick={() => addPileOn(onePoint.id)}>
-            <LandPlot /> Put a pile on this point
+            <LandPlot /> {t('inspector.putPile')}
           </Button>
         )}
         <div className="space-y-1.5">
           <Label>
-            {related.length} {plural(related.length, 'constraint')}
-            {selection.length > 1 ? ' between them' : ''}
+            {selection.length > 1
+              ? t('inspector.constraintsBetween', { count: related.length })
+              : t('inspector.constraints', { count: related.length })}
           </Label>
           {related.length ? (
             <ul className="space-y-1">{related.map(row)}</ul>
           ) : (
-            <p className="text-xs text-muted-foreground">None yet — use the toolbar above the drawing.</p>
+            <p className="text-xs text-muted-foreground">{t('inspector.noConstraints')}</p>
           )}
         </div>
         <Button
@@ -205,7 +216,14 @@ export function Inspector({ ops }: { ops: CadOps }) {
             select([]);
           }}
         >
-          <Trash2 /> Delete {selection.length === 1 ? (pile ? 'pile' : onePoint ? 'point' : 'line') : `${selection.length} items`}
+          <Trash2 />{' '}
+          {selection.length === 1
+            ? pile
+              ? t('inspector.deletePile')
+              : onePoint
+                ? t('inspector.deletePoint')
+                : t('inspector.deleteLine')
+            : t('inspector.deleteItems', { count: selection.length })}
         </Button>
       </CardContent>
     </Card>

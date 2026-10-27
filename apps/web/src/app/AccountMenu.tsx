@@ -1,5 +1,6 @@
 import { CloudCheck, LogIn, LogOut, Mail } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -42,6 +43,7 @@ function GithubMark() {
 
 /** Sign in / create an account: Google, GitHub (when enabled), email + password, or an email link. */
 function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useTranslation('project');
   const { signIn, signUp, sendMagicLink, signInWith } = useAuth();
   const providers = useProviders();
   const [mode, setMode] = useState<'in' | 'up'>('in');
@@ -68,7 +70,7 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
       }
       const r = await signUp(email, password);
       if (r.error) return { ok: false, text: r.error };
-      if (r.confirm) return { ok: true, text: `Check ${email} — confirm the address to finish creating your account.` };
+      if (r.confirm) return { ok: true, text: t('account.checkEmail', { email }) };
       onOpenChange(false);
       return null;
     });
@@ -78,8 +80,8 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{mode === 'in' ? 'Sign in' : 'Create an account'}</DialogTitle>
-          <DialogDescription>Your sketches sync across your devices. Without an account they stay on this device.</DialogDescription>
+          <DialogTitle>{mode === 'in' ? t('account.signIn') : t('account.createAccountTitle')}</DialogTitle>
+          <DialogDescription>{t('account.description')}</DialogDescription>
         </DialogHeader>
         {providers.length > 0 && (
           <div className="grid gap-2">
@@ -95,21 +97,21 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                   })
                 }
               >
-                {p === 'google' ? <GoogleMark /> : <GithubMark />} Continue with {PROVIDER_NAME[p]}
+                {p === 'google' ? <GoogleMark /> : <GithubMark />} {t('account.continueWith', { provider: PROVIDER_NAME[p] })}
               </Button>
             ))}
             <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
+              <span className="h-px flex-1 bg-border" /> {t('account.orWithEmail')} <span className="h-px flex-1 bg-border" />
             </div>
           </div>
         )}
         <form className="grid gap-3" onSubmit={submit}>
           <div className="grid gap-1.5">
-            <Label htmlFor="auth-email">Email</Label>
+            <Label htmlFor="auth-email">{t('account.email')}</Label>
             <Input id="auth-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="auth-password">Password</Label>
+            <Label htmlFor="auth-password">{t('account.password')}</Label>
             <Input
               id="auth-password"
               type="password"
@@ -121,12 +123,12 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
             />
           </div>
           <Button type="submit" disabled={busy}>
-            {mode === 'in' ? 'Sign in' : 'Create account'}
+            {mode === 'in' ? t('account.signIn') : t('account.createAccount')}
           </Button>
         </form>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <button className="text-primary hover:underline" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
-            {mode === 'in' ? 'Create an account' : 'I already have an account'}
+            {mode === 'in' ? t('account.switchToSignUp') : t('account.switchToSignIn')}
           </button>
           <button
             className="flex items-center gap-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
@@ -134,11 +136,11 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
             onClick={() =>
               void run(async () => {
                 const err = await sendMagicLink(email);
-                return err ? { ok: false, text: err } : { ok: true, text: `Sent a sign-in link to ${email}.` };
+                return err ? { ok: false, text: err } : { ok: true, text: t('account.linkSent', { email }) };
               })
             }
           >
-            <Mail className="size-3.5" /> Email me a link instead
+            <Mail className="size-3.5" /> {t('account.emailLink')}
           </button>
         </div>
         {note && <p className={note.ok ? 'text-sm text-ok' : 'text-sm text-destructive'}>{note.text}</p>}
@@ -149,6 +151,7 @@ function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 
 /** Top-bar account control; absent when the build has no backend. */
 export function AccountMenu() {
+  const { t } = useTranslation('project');
   const { ready, account, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   if (!supabase || !ready) return null;
@@ -156,7 +159,7 @@ export function AccountMenu() {
     return (
       <>
         <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
-          <LogIn /> <span className="hidden sm:inline">Sign in</span>
+          <LogIn /> <span className="hidden sm:inline">{t('account.signIn')}</span>
         </Button>
         <SignInDialog open={open} onOpenChange={setOpen} />
       </>
@@ -164,7 +167,7 @@ export function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Account" className="rounded-full">
+        <Button variant="ghost" size="icon" aria-label={t('account.label')} className="rounded-full">
           <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground uppercase">
             {account.email.slice(0, 1) || '?'}
           </span>
@@ -173,11 +176,11 @@ export function AccountMenu() {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="truncate font-normal">{account.email}</DropdownMenuLabel>
         <DropdownMenuLabel className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-          <CloudCheck className="size-3.5" /> Sketches sync to your account
+          <CloudCheck className="size-3.5" /> {t('account.syncing')}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => void signOut()}>
-          <LogOut /> Sign out
+          <LogOut /> {t('account.signOut')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
