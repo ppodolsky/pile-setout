@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createHashRouter, Navigate, RouterProvider, useParams } from 'react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from './AppShell';
@@ -19,6 +20,11 @@ function StartRedirect() {
   return <Navigate to={startRoute()} replace />;
 }
 
+function Loading() {
+  const { t } = useTranslation();
+  return <div className="p-6 text-sm text-muted-foreground">{t('loading')}</div>;
+}
+
 function ModeRoute() {
   const { toolId, modeId } = useParams();
   const tool = TOOLS.find((t) => t.id === toolId);
@@ -30,7 +36,7 @@ function ModeRoute() {
   if (!mode) return <Navigate to={`/${tool.id}/${tool.modes[0]!.id}`} replace />;
   const Element = mode.element;
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={<Loading />}>
       <Element />
     </Suspense>
   );
@@ -50,9 +56,11 @@ const router = createHashRouter([
 ]);
 
 export function App() {
+  // remount on a language switch so every number and date re-formats too
+  const { i18n } = useTranslation();
   return (
     <TooltipProvider delayDuration={300}>
-      <RouterProvider router={router} />
+      <RouterProvider key={i18n.language} router={router} />
     </TooltipProvider>
   );
 }

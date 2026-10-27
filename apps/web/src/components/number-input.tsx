@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { parseNum } from '@/lib/format';
+import { decimalSeparator, parseNum } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export interface NumberInputProps extends Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'min' | 'max'> {
@@ -18,7 +18,7 @@ export interface NumberInputProps extends Omit<React.ComponentProps<'input'>, 'v
  * valid values and flags invalid ones. Follows external value changes when not focused.
  */
 export function NumberInput({ value, onValue, min, max, allowEmpty, digits = 2, className, onFocus, onBlur, ...rest }: NumberInputProps) {
-  const show = (v: number | null) => (v == null ? '' : String(Math.round(v * 10 ** digits) / 10 ** digits));
+  const show = (v: number | null) => (v == null ? '' : String(Math.round(v * 10 ** digits) / 10 ** digits).replace('.', decimalSeparator()));
   const [text, setText] = useState(show(value));
   const [focused, setFocused] = useState(false);
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { Maximize2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Box, Vec2 } from '@buildkit/geometry';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ export function Viewport({
   controls,
   label,
 }: ViewportProps) {
+  const { t } = useTranslation();
   const host = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [manual, setManual] = useState<View | null>(null);
@@ -206,8 +208,8 @@ export function Viewport({
           variant="secondary"
           className="size-8 shadow-sm"
           onClick={() => setManual(null)}
-          aria-label="Fit drawing"
-          title="Fit drawing"
+          aria-label={t('fitDrawing')}
+          title={t('fitDrawing')}
         >
           <Maximize2 className="size-4" />
         </Button>

@@ -1,4 +1,5 @@
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { Languages, Monitor, Moon, Sun } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,6 +9,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { LANGUAGES, setLanguage, type Language } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { AccountMenu } from './AccountMenu';
 import { useTheme, type ThemePref } from './theme';
@@ -15,6 +17,7 @@ import { TOOLS } from './tools';
 
 /** Top bar: product, current tool, its modes (Design / Field work …), project menu and theme. */
 export function AppShell() {
+  const { t, i18n } = useTranslation();
   const { toolId } = useParams();
   const tool = TOOLS.find((t) => t.id === toolId) ?? TOOLS[0]!;
   const [theme, setTheme] = useTheme();
@@ -28,12 +31,12 @@ export function AppShell() {
           <div className="flex min-w-0 items-center gap-2.5">
             <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="size-7 rounded-md" />
             <div className="hidden min-w-0 leading-tight sm:block">
-              <div className="truncate text-sm font-semibold">{tool.name}</div>
-              <div className="text-xs text-muted-foreground">Buildkit</div>
+              <div className="truncate text-sm font-semibold">{t(`tools.${tool.id}.name` as 'tools.piles.name', { defaultValue: tool.name })}</div>
+              <div className="text-xs text-muted-foreground">{t('app')}</div>
             </div>
           </div>
 
-          <nav className="mx-auto flex rounded-lg bg-muted p-1" aria-label="Mode">
+          <nav className="mx-auto flex rounded-lg bg-muted p-1" aria-label={t('nav.mode')}>
             {tool.modes.map((m) => (
               <NavLink
                 key={m.id}
@@ -46,7 +49,7 @@ export function AppShell() {
                 }
               >
                 <m.icon className="size-4" />
-                {m.name}
+                {t(`modes.${m.id}` as 'modes.design', { defaultValue: m.name })}
               </NavLink>
             ))}
           </nav>
@@ -56,15 +59,31 @@ export function AppShell() {
             <AccountMenu />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Theme">
+                <Button variant="ghost" size="icon" aria-label={t('language.label')}>
+                  <Languages />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup value={i18n.language} onValueChange={(v) => setLanguage(v as Language)}>
+                  {LANGUAGES.map((l) => (
+                    <DropdownMenuRadioItem key={l.code} value={l.code} lang={l.code}>
+                      {l.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={t('theme.label')}>
                   <ThemeIcon />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemePref)}>
-                  <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="light">{t('theme.light')}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">{t('theme.dark')}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">{t('theme.system')}</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
