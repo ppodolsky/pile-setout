@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import {
   computePlan,
-  containerOutlines,
+  drawingExtent,
+  drawingSnapGeometry,
   pilesOf,
   setoutPlan,
   solveDocument,
@@ -34,9 +35,15 @@ export function useDesign(): DesignView {
   }, [doc]);
 }
 
-export function useOutlines() {
-  const containers = useProject((s) => s.design.template.containers);
-  return useMemo(() => containerOutlines(containers), [containers]);
+/** Background drawings of the design (container outlines …). */
+export function useBackgrounds() {
+  return useProject((s) => s.design.backgrounds);
+}
+
+/** Snap targets of the visible background drawings, and their extent for fitting views. */
+export function useBackgroundGeometry() {
+  const backgrounds = useBackgrounds();
+  return useMemo(() => ({ reference: drawingSnapGeometry(backgrounds), extent: drawingExtent(backgrounds) }), [backgrounds]);
 }
 
 export interface FieldworkView {

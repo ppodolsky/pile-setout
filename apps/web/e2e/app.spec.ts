@@ -83,9 +83,26 @@ test.describe('design (constraint sketch)', () => {
   test('template is a fully constrained sketch', async ({ page }) => {
     await fresh(page, '/piles/design');
     await expect(page.getByText('fully constrained').first()).toBeVisible();
-    await page.getByRole('button', { name: "10'" }).first().click();
+    await page.getByRole('button', { name: "Use 10' + 20'" }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Use', exact: true }).click();
     await expect(page.getByText('Piles (8)')).toBeVisible();
     await noHorizontalOverflow(page);
+  });
+
+  test('templates: add one next to the design, drawings can be hidden, own templates are saved', async ({ page }) => {
+    await fresh(page, '/piles/design');
+    await page.getByRole('button', { name: "Add 20'", exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText('Piles (12)')).toBeVisible();
+    await expect(page.getByText('C12', { exact: true }).first()).toBeVisible(); // numbering continues
+    // two container outlines as background drawings; hide one
+    await page.getByRole('button', { name: "Hide 20'" }).first().click();
+    await expect(page.getByRole('button', { name: "Show 20'" })).toHaveCount(1);
+    // save the design as my template and find it in the library
+    await page.getByLabel('Template name').fill('Two sheds');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Saved “Two sheds” to My templates.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use Two sheds' })).toBeVisible();
   });
 
   test('a new pile constrained to another by distance + angle', async ({ page, isMobile }) => {

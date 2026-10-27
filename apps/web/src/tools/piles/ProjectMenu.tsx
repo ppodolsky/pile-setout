@@ -28,7 +28,7 @@ import {
 import { LibrarySheet } from './LibrarySheet';
 import { exportDesign, importDesign } from './model/interop';
 import { saveCurrent, startAutosave } from './model/library';
-import { designFromTemplate, newProject } from './model/project';
+import { newProject } from './model/project';
 import { newIdentity, useProject } from './model/store';
 
 const FILE_KIND = 'buildkit.pile-field';
@@ -76,11 +76,12 @@ export function ProjectMenu() {
           .getState()
           .open(newIdentity(d.name ?? sketchName), { design: d.design, fieldwork: d.fieldwork, view: d.view ?? base.view });
       } else {
-        const head = useProject.getState().design.template.head;
+        const head = useProject.getState().design.defaults.head;
         const r = await importDesign(f, { head });
         if (!r) throw new Error(t('menu.unsupported'));
         await saveCurrent();
-        const design = { ...designFromTemplate(base.design.template), doc: r.doc, edited: true };
+        // an imported plan comes without background drawings
+        const design = { ...base.design, backgrounds: [], doc: r.doc };
         useProject.getState().open(newIdentity(sketchName), { design, fieldwork: base.fieldwork, view: base.view });
         if (r.warnings.length) setNotice({ title: t('menu.opened', { file: f.name }), lines: r.warnings });
       }

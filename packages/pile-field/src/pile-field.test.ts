@@ -129,6 +129,19 @@ describe('generateDesign', () => {
   });
 });
 
+describe('container templates', () => {
+  it('draw outlines, castings and pockets as a background drawing', async () => {
+    const { instantiateContainers } = await import('./index');
+    const { background, design } = instantiateContainers(['20'], { head: 200, inset: 0 }, 'bg1');
+    const rects = background.shapes.filter((s) => s.kind === 'rect');
+    expect(rects.filter((s) => s.kind === 'rect' && s.style === 'outline')).toHaveLength(1);
+    expect(rects.filter((s) => s.kind === 'rect' && s.style === 'detail')).toHaveLength(4);
+    expect(rects.filter((s) => s.kind === 'rect' && s.style === 'fill')).toHaveLength(4);
+    expect(pilesOf(design)).toHaveLength(6);
+    expect(background.name).toBe("20'");
+  });
+});
+
 describe('set-out of derived piles', () => {
   it('sets middle supports on the string between corrected corners', () => {
     const { piles, constraints } = field20();

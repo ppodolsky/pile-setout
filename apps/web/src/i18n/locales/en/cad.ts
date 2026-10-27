@@ -87,4 +87,7 @@ export const cad = {
   },
   /** A point's coordinates, x and y. */
   coords: '{{x}}, {{y}}',
+  background: {
+    titles: { Container: 'Container', 'Corner casting': 'Corner casting (178 × 162)', 'Forklift pocket': 'Forklift pocket (schematic)' },
+  },
 } as const;

@@ -2,6 +2,7 @@ import { CircleCheck, CircleDashed, LandPlot, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { constraintPoints } from '@buildkit/sketch';
 import { ConstraintRow, useCadEditor, type CadOps } from '@/cad';
+import { Field, FieldRow } from '@/components/field';
 import { NumberInput } from '@/components/number-input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -118,9 +119,8 @@ export function Inspector({ ops }: { ops: CadOps }) {
       </CardHeader>
       <CardContent className="space-y-4 px-4">
         {onePoint && (
-          <div className="grid grid-cols-[1fr_1fr_1fr] gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="pile-label">{t('inspector.label')}</Label>
+          <FieldRow cols={3}>
+            <Field label={t('inspector.label')} htmlFor="pile-label">
               {pile ? (
                 <Input
                   id="pile-label"
@@ -131,26 +131,22 @@ export function Inspector({ ops }: { ops: CadOps }) {
               ) : (
                 <Input id="pile-label" value="—" disabled />
               )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('inspector.x')}</Label>
+            </Field>
+            <Field label={t('inspector.x')}>
               <NumberInput value={onePoint.x} onValue={(x) => x != null && ops.setPointPosition(onePoint.id, { x, y: onePoint.y })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('inspector.y')}</Label>
+            </Field>
+            <Field label={t('inspector.y')}>
               <NumberInput value={onePoint.y} onValue={(y) => y != null && ops.setPointPosition(onePoint.id, { x: onePoint.x, y })} />
-            </div>
-          </div>
+            </Field>
+          </FieldRow>
         )}
         {pile && (
           <>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1.5">
-                <Label>{t('inspector.head')}</Label>
+            <FieldRow cols={3}>
+              <Field label={t('inspector.head')}>
                 <NumberInput value={pile.head} min={10} onValue={(head) => head != null && updatePile(pile.id, { head })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t('inspector.diameter')}</Label>
+              </Field>
+              <Field label={t('inspector.diameter')}>
                 <NumberInput
                   value={pile.diameter ?? null}
                   allowEmpty
@@ -158,9 +154,8 @@ export function Inspector({ ops }: { ops: CadOps }) {
                   placeholder="—"
                   onValue={(d) => updatePile(pile.id, { diameter: d ?? undefined })}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t('inspector.depth')}</Label>
+              </Field>
+              <Field label={t('inspector.depth')}>
                 <NumberInput
                   value={pile.depth ?? null}
                   allowEmpty
@@ -168,8 +163,8 @@ export function Inspector({ ops }: { ops: CadOps }) {
                   placeholder="—"
                   onValue={(d) => updatePile(pile.id, { depth: d ?? undefined })}
                 />
-              </div>
-            </div>
+              </Field>
+            </FieldRow>
             <div className="space-y-1.5">
               <Label>{t('inspector.inFieldWork')}</Label>
               <ToggleGroup

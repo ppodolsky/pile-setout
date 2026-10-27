@@ -1,21 +1,21 @@
 import { CircleDot, LandPlot, MousePointer2, PenLine, Redo2, SquareDashedMousePointer, Undo2 } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from 'zustand';
-import { CadCanvas, SelectionToolbar, useCadEditor, type CadTool } from '@/cad';
+import { BackgroundLayer, CadCanvas, SelectionToolbar, useCadEditor, type CadTool } from '@/cad';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Containers } from '../drawing/layers';
-import { useDesign, useOutlines } from '../model/derived';
+import { useBackgroundGeometry, useBackgrounds, useDesign } from '../model/derived';
 import { usePileOps } from '../model/ops';
 import { useProject } from '../model/store';
 import { Inspector } from './Inspector';
 import { PileLayer } from './PileLayer';
 import { PileList } from './PileList';
-import { TemplateCard } from './TemplateCard';
+import { SketchesCard } from './SketchesCard';
+import { TemplatesCard } from './TemplatesCard';
 
 /** Drawing tools; the name is `mode.tools.<id>` in the `design` namespace. */
 const TOOLS = [
@@ -38,19 +38,12 @@ export default function DesignMode() {
   const { t } = useTranslation('design');
   const model = useDesign();
   const ops = usePileOps();
-  const outlines = useOutlines();
-  const head = useProject((s) => s.design.template.head);
+  const backgrounds = useBackgrounds();
+  const { reference, extent } = useBackgroundGeometry();
+  const head = useProject((s) => s.design.defaults.head);
   const showConstraints = useProject((s) => s.view.showConstraints);
   const { tool, setTool, selection, select, constraint, selectConstraint, message, multi, setMulti, setLineStart } = useCadEditor();
   const { undo, redo, pastStates, futureStates } = useStore(useProject.temporal);
-  const extent = useMemo(
-    () =>
-      outlines.flatMap((o) => [
-        { x: o.x0, y: 0 },
-        { x: o.x0 + o.length, y: o.width },
-      ]),
-    [outlines],
-  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -152,14 +145,16 @@ export default function DesignMode() {
             extent={extent}
             showConstraints={showConstraints}
             ghostSize={head}
-            background={<Containers outlines={outlines} />}
+            background={<BackgroundLayer drawings={backgrounds} />}
+            reference={reference}
             elements={<PileLayer />}
           />
         </div>
       </section>
       <aside className="flex flex-col gap-4 lg:overflow-y-auto lg:pb-4">
         <Inspector ops={ops} />
-        <TemplateCard />
+        <SketchesCard />
+        <TemplatesCard />
         <PileList />
       </aside>
     </div>

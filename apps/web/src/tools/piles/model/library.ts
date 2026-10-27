@@ -21,7 +21,12 @@ export function sketchStore(): SketchStore {
 useAuth.subscribe((s, prev) => {
   if (s.account?.id === prev.account?.id) return;
   synced = null;
-  if (s.account) void saveCurrent().then(() => (sketchStore() as ReturnType<typeof syncedSketchStore>).sync(TOOL_ID));
+  if (s.account)
+    void saveCurrent().then(async () => {
+      const store = sketchStore() as ReturnType<typeof syncedSketchStore>;
+      await store.sync(TOOL_ID);
+      await store.sync('piles-template'); // the user's design templates travel too
+    });
 });
 
 /** What a sketch's list entry shows, stored language-neutral (JSON) and translated when shown. */

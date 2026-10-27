@@ -112,3 +112,50 @@ describe('selection actions', () => {
     expect(selectionActions(1, 1).map((a) => a.id)).toContain('on-line');
   });
 });
+
+describe('background drawings', () => {
+  const drawing = {
+    id: 'bg',
+    name: 'Container',
+    shapes: [{ kind: 'rect' as const, x: 0, y: 0, w: 6058, h: 2438, style: 'outline' as const }],
+    offset: { x: 1000, y: 0 },
+    rotation: 90,
+    visible: true,
+    locked: true,
+  };
+
+  it('places shapes by offset and rotation and exposes snap targets', async () => {
+    const { drawingSnapGeometry } = await import('./index');
+    const g = drawingSnapGeometry([drawing]);
+    expect(g.points).toHaveLength(4);
+    expect(g.segments).toHaveLength(4);
+    expect(g.points[1]!.x).toBeCloseTo(1000, 6); // (6058, 0) turned 90° → (0, 6058), then offset
+    expect(g.points[1]!.y).toBeCloseTo(6058, 6);
+    expect(drawingSnapGeometry([{ ...drawing, visible: false }]).points).toHaveLength(0);
+  });
+
+  it('snaps to a drawing corner and edge without inferring constraints', async () => {
+    const { drawingSnapGeometry } = await import('./index');
+    const reference = drawingSnapGeometry([{ ...drawing, rotation: 0, offset: { x: 0, y: 0 } }]);
+    const corner = snapPoint({ x: 6040, y: 20 }, { points: [], lines: [], scale: 0.2, reference });
+    expect(corner.at).toEqual({ x: 6058, y: 0 });
+    expect(corner.infer('N')).toEqual([]);
+    const edge = snapPoint({ x: 3001, y: 2430 }, { points: [], lines: [], scale: 0.2, reference });
+    expect(edge.at.y).toBeCloseTo(2438, 6);
+  });
+});
+
+describe('merging documents', () => {
+  it('adds a shifted copy with fresh ids and remapped constraints', async () => {
+    const { mergeDocuments } = await import('./index');
+    let n = 0;
+    const merged = mergeDocuments(rect(), rect(), { x: 10000, y: 0 }, (p) => `${p}${++n}`);
+    expect(merged.points).toHaveLength(8);
+    expect(new Set(merged.points.map((p) => p.id)).size).toBe(8);
+    expect(merged.elements).toHaveLength(2);
+    const { doc, status } = solveDocument(merged);
+    expect(status.conflicts.size).toBe(0);
+    expect(status.dof).toBe(0);
+    expect(doc.points.filter((p) => p.x >= 10000)).toHaveLength(4); // the copy stayed where it was put
+  });
+});

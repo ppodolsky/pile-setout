@@ -8,8 +8,9 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { fmt } from '@/lib/format';
 import { SetoutLines } from '../drawing/setout';
-import { Containers, PileHead, PileMark } from '../drawing/layers';
-import { useFieldwork, useOutlines } from '../model/derived';
+import { BackgroundLayer } from '@/cad';
+import { PileHead, PileMark } from '../drawing/layers';
+import { useBackgroundGeometry, useBackgrounds, useFieldwork } from '../model/derived';
 import { useCadEditor } from '@/cad';
 import { useProject } from '../model/store';
 
@@ -18,8 +19,7 @@ function PlanLayers() {
   const { t } = useTranslation('fieldwork');
   const v = useView();
   const { plan, piles, setout } = useFieldwork();
-  const outlines = useOutlines();
-  const head = useProject((s) => s.design.template.head);
+  const backgrounds = useBackgrounds();
   const { exaggeration, showLines } = useProject((s) => s.view);
   const tol = useProject((s) => s.fieldwork.tolerance);
   const hovered = useCadEditor((s) => s.hovered);
@@ -31,7 +31,7 @@ function PlanLayers() {
 
   return (
     <g>
-      <Containers outlines={outlines} frame={frame} />
+      <BackgroundLayer drawings={backgrounds} frame={frame} />
       {showLines && plan.status !== 'empty' && (
         <g opacity={hovered ? 0.15 : 0.55}>
           {plan.adjustment.residuals.map((r) => {
@@ -57,7 +57,7 @@ function PlanLayers() {
         const step = plan.status === 'ok' ? plan.steps.get(p.id) : undefined;
         return (
           <g key={p.id} opacity={dim(p.id)}>
-            <PileHead pile={p} head={head} frame={frame} tone={isDerived ? 'param' : p.shared ? 'shared' : 'fixed'} />
+            <PileHead pile={p} head={p.head} frame={frame} tone={isDerived ? 'param' : p.shared ? 'shared' : 'fixed'} />
             {A && !isDerived && <circle cx={A.x} cy={A.y} r={4.5} fill="var(--move)" />}
             {moving && A && tip && (
               <>
@@ -101,19 +101,13 @@ function PlanLayers() {
 export function PlanCard() {
   const { t } = useTranslation('fieldwork');
   const { piles } = useFieldwork();
-  const outlines = useOutlines();
+  const { extent } = useBackgroundGeometry();
   const view = useProject((s) => s.view);
   const setView = useProject.getState().setView;
   const content = useMemo(() => {
-    const pts = [
-      ...piles,
-      ...outlines.flatMap((o) => [
-        { x: o.x0, y: 0 },
-        { x: o.x0 + o.length, y: o.width },
-      ]),
-    ];
+    const pts = [...piles, ...extent];
     return expandBox(pts.length ? bounds(pts) : { minX: 0, minY: 0, maxX: 6000, maxY: 2400 }, 300);
-  }, [piles, outlines]);
+  }, [piles, extent]);
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 px-4">

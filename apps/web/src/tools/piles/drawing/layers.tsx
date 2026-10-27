@@ -1,6 +1,5 @@
-import { useTranslation } from 'react-i18next';
 import { applyRigid, type RigidTransform, type Vec2 } from '@buildkit/geometry';
-import { CASTING, CONTAINERS, POCKETS, type ContainerOutline, type Pile } from '@buildkit/pile-field';
+import type { Pile } from '@buildkit/pile-field';
 import { Label, Poly, toScreen, useView } from '@/drawing';
 
 /** Optional design → field-frame placement (field work); identity in design mode. */
@@ -13,58 +12,6 @@ const rect = (f: Frame, x0: number, y0: number, w: number, h: number): Vec2[] =>
     { x: x0 + w, y: y0 + h },
     { x: x0, y: y0 + h },
   ].map((p) => place(f, p));
-
-/** Container outlines with corner castings and (20′) forklift pockets. */
-export function Containers({ outlines, frame }: { outlines: readonly ContainerOutline[]; frame?: Frame }) {
-  const { t } = useTranslation('design');
-  return (
-    <g>
-      {outlines.map((o) => {
-        const c = CONTAINERS[o.type];
-        const castX = [c.cast, o.length - c.cast];
-        const castY = [CASTING.sideOffset, o.width - CASTING.sideOffset];
-        return (
-          <g key={o.x0}>
-            <Poly
-              points={rect(frame, o.x0, 0, o.length, o.width)}
-              fill="var(--draw-container)"
-              stroke="var(--draw-container-stroke)"
-              strokeWidth={1.5}
-            />
-            {castX.flatMap((cx) =>
-              castY.map((cy) => (
-                <Poly
-                  key={`${cx}-${cy}`}
-                  points={rect(frame, o.x0 + cx - CASTING.length / 2, cy - CASTING.width / 2, CASTING.length, CASTING.width)}
-                  fill="color-mix(in oklch, var(--draw-container-stroke) 10%, transparent)"
-                  stroke="var(--draw-container-stroke)"
-                  strokeWidth={0.8}
-                  strokeDasharray="3 2"
-                  opacity={0.8}
-                >
-                  <title>{t('layers.casting')}</title>
-                </Poly>
-              )),
-            )}
-            {c.pockets &&
-              POCKETS.centers.flatMap((px) =>
-                [0, o.width - POCKETS.depth].map((py) => (
-                  <Poly
-                    key={`${px}-${py}`}
-                    points={rect(frame, o.x0 + px - POCKETS.length / 2, py, POCKETS.length, POCKETS.depth)}
-                    fill="var(--draw-container-stroke)"
-                    opacity={0.15}
-                  >
-                    <title>{t('layers.pocket')}</title>
-                  </Poly>
-                )),
-              )}
-          </g>
-        );
-      })}
-    </g>
-  );
-}
 
 export type HeadTone = 'fixed' | 'param' | 'shared' | 'selected' | 'ghost' | 'free';
 

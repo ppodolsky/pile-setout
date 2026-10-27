@@ -1,5 +1,13 @@
-import { isContainerType, projectT, type CadConstraint, type ContainerType, type Measurement, type PileDesign } from './deps';
-import { designFromTemplate, newProject, type DesignState, type ProjectData } from './project';
+import {
+  isContainerType,
+  projectT,
+  type CadConstraint,
+  type ContainerType,
+  type Measurement,
+  type PileDesign,
+  type TemplateSpec,
+} from './deps';
+import { DEFAULT_TEMPLATE, designFromV4, newProject, type DesignState, type ProjectData } from './project';
 
 /** Version-3 pile (piles were points themselves). */
 interface V3Pile {
@@ -33,22 +41,22 @@ function upgradeDesign(piles: readonly V3Pile[], constraints: readonly CadConstr
 export function migrateV3(state: Raw): ProjectData {
   const base = newProject();
   const d = (state.design ?? {}) as Raw;
-  const template = (d.template as DesignState['template']) ?? base.design.template;
+  const template = (d.template as TemplateSpec | undefined) ?? DEFAULT_TEMPLATE;
   if (!d.edited)
     return {
       ...base,
       ...(state as object),
-      design: designFromTemplate(template),
+      design: designFromV4({ template, edited: false }),
       view: { ...base.view, ...((state.view as object) ?? {}) },
     } as ProjectData;
   return {
     ...base,
     ...(state as object),
-    design: {
+    design: designFromV4({
       template,
       doc: upgradeDesign((d.piles as V3Pile[]) ?? [], (d.constraints as CadConstraint[]) ?? [], template.head),
       edited: true,
-    },
+    }),
     view: { ...base.view, ...((state.view as object) ?? {}) },
   } as ProjectData;
 }
@@ -111,12 +119,12 @@ export function migrateV1(raw: string | null): ProjectData | null {
     } else constraints.push({ id: `k${i + 1}`, kind: 'fix', p: `p${i + 1}`, x: p.x as number, y: p.y as number });
   });
   // a layout that is exactly the template's gets the template's (nicer) constraints
-  const generated = designFromTemplate(template);
+  const generated = designFromV4({ template, edited: false });
   const gp = generated.doc.elements.map((e) => generated.doc.points.find((p) => p.id === e.point)!);
   const same = gp.length === ps.length && gp.every((g, i) => Math.abs(g.x - ps[i]!.x) < 0.01 && Math.abs(g.y - ps[i]!.y) < 0.01);
   const design: DesignState = same
     ? { ...generated, doc: { ...generated.doc, elements: generated.doc.elements.map((e, i) => ({ ...e, label: ps[i]!.label })) } }
-    : { template, doc: upgradeDesign(ps, constraints, template.head), edited: true };
+    : designFromV4({ template, doc: upgradeDesign(ps, constraints, template.head), edited: true });
 
   const measurements: Measurement[] = (Array.isArray(d.meas) ? (d.meas as Raw[]) : [])
     .filter((m) => idOf.has(m.a as string) && idOf.has(m.b as string))
@@ -152,12 +160,12 @@ export function migrateV2(state: Raw): ProjectData {
   const base = newProject();
   const design = (state.design ?? {}) as Raw;
   const specs = (Array.isArray(design.piles) ? design.piles : []) as Raw[];
-  const template = (design.template as DesignState['template']) ?? base.design.template;
+  const template = (design.template as TemplateSpec | undefined) ?? DEFAULT_TEMPLATE;
   if (!design.edited) {
     return {
       ...base,
       ...(state as object),
-      design: designFromTemplate(template),
+      design: designFromV4({ template, edited: false }),
       view: { ...base.view, ...((state.view as object) ?? {}) },
     } as ProjectData;
   }
@@ -225,8 +233,20 @@ export function migrateV2(state: Raw): ProjectData {
   }
   const fw = (state.fieldwork ?? base.fieldwork) as ProjectData['fieldwork'];
   return {
-    design: { template, doc: upgradeDesign(piles, constraints, template.head), edited: true },
+    design: designFromV4({ template, doc: upgradeDesign(piles, constraints, template.head), edited: true }),
     fieldwork: fw,
     view: { ...base.view, ...((state.view as object) ?? {}) },
   };
+}
+
+/** Persisted version 4 (template + plan) → current (background drawings + pile field). */
+export function migrateV4(state: Raw): ProjectData {
+  const base = newProject();
+  const d = (state.design ?? {}) as { template?: TemplateSpec; doc?: PileDesign; edited?: boolean };
+  return {
+    ...base,
+    ...(state as object),
+    design: designFromV4({ template: d.template ?? DEFAULT_TEMPLATE, ...(d.doc ? { doc: d.doc } : {}), edited: !!d.edited }),
+    view: { ...base.view, ...((state.view as object) ?? {}) },
+  } as ProjectData;
 }

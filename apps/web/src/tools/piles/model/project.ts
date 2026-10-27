@@ -1,11 +1,21 @@
-import { generateDesign, solveDocument, type Measurement, type ParametricMode, type PileDesign, type TemplateSpec } from './deps';
+import { uid } from '@/lib/id';
+import {
+  instantiateContainers,
+  solveDocument,
+  type BackgroundDrawing,
+  type ContainerType,
+  type Measurement,
+  type ParametricMode,
+  type PileDesign,
+  type TemplateSpec,
+} from './deps';
 
-/** Design: the container template and the pile plan (a CAD document whose elements are piles). */
+/** Design: background drawings (reference only, e.g. container outlines) and the pile field. */
 export interface DesignState {
-  readonly template: TemplateSpec;
+  readonly backgrounds: readonly BackgroundDrawing[];
   readonly doc: PileDesign;
-  /** Edited by hand: template changes no longer regenerate the plan automatically. */
-  readonly edited: boolean;
+  /** Defaults for new piles and template inserts. */
+  readonly defaults: { readonly head: number; readonly inset: number };
 }
 
 /** Field work: tape measurements taken on site and how the move plan is computed. */
@@ -36,13 +46,21 @@ export interface ProjectData {
 
 export const DEFAULT_TEMPLATE: TemplateSpec = { containers: ['20'], head: 200, inset: 0 };
 
-export function designFromTemplate(template: TemplateSpec): DesignState {
-  return { template, doc: solveDocument(generateDesign(template)).doc, edited: false };
+/** A design made from a container combination: its outline drawing plus its pile field. */
+export function designFromContainers(containers: readonly ContainerType[], piles: { head: number; inset: number }): DesignState {
+  const { background, design } = instantiateContainers(containers, piles, uid('bg'));
+  return { backgrounds: [background], doc: solveDocument(design).doc, defaults: piles };
+}
+
+/** Version-4 design (one container template + the pile plan) → background drawing + pile field. */
+export function designFromV4(d: { template: TemplateSpec; doc?: PileDesign; edited: boolean }): DesignState {
+  const generated = designFromContainers(d.template.containers, { head: d.template.head, inset: d.template.inset });
+  return d.edited && d.doc ? { ...generated, doc: d.doc } : generated;
 }
 
 export function newProject(): ProjectData {
   return {
-    design: designFromTemplate(DEFAULT_TEMPLATE),
+    design: designFromContainers(DEFAULT_TEMPLATE.containers, { head: DEFAULT_TEMPLATE.head, inset: DEFAULT_TEMPLATE.inset }),
     fieldwork: { measurements: [], tolerance: 3, pinned: [], parametric: 'derived' },
     view: { exaggeration: 10, showLines: true, showConstraints: true },
   };

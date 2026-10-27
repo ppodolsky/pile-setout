@@ -1,5 +1,5 @@
-import type { CadConstraint, Line, Point } from '@buildkit/cad';
-import { CONTAINER_WIDTH, CONTAINERS, type ContainerType } from './containers';
+import type { BackgroundDrawing, CadConstraint, Line, Point, Shape } from '@buildkit/cad';
+import { CASTING, CONTAINER_WIDTH, CONTAINERS, POCKETS, type ContainerType } from './containers';
 import type { PileDesign, PileElement } from './design';
 
 export interface ContainerOutline {
@@ -118,4 +118,80 @@ export function generateDesign({ containers, head, inset }: TemplateSpec): PileD
     }
   });
   return { points, lines, constraints, elements };
+}
+
+/**
+ * Container outlines as a background drawing: each container's outline, its corner castings and
+ * (20′) forklift pockets, and its size as a label. Containers are joined end to end from x = 0.
+ */
+export function containerShapes(containers: readonly ContainerType[]): Shape[] {
+  return containerOutlines(containers).flatMap((o) => {
+    const c = CONTAINERS[o.type];
+    const shapes: Shape[] = [{ kind: 'rect', x: o.x0, y: 0, w: o.length, h: o.width, style: 'outline', title: 'Container' }];
+    for (const cx of [c.cast, o.length - c.cast])
+      for (const cy of [CASTING.sideOffset, o.width - CASTING.sideOffset])
+        shapes.push({
+          kind: 'rect',
+          x: o.x0 + cx - CASTING.length / 2,
+          y: cy - CASTING.width / 2,
+          w: CASTING.length,
+          h: CASTING.width,
+          style: 'detail',
+          title: 'Corner casting',
+        });
+    if (c.pockets)
+      for (const px of POCKETS.centers)
+        for (const py of [0, o.width - POCKETS.depth])
+          shapes.push({
+            kind: 'rect',
+            x: o.x0 + px - POCKETS.length / 2,
+            y: py,
+            w: POCKETS.length,
+            h: POCKETS.depth,
+            style: 'fill',
+            title: 'Forklift pocket',
+          });
+    shapes.push({ kind: 'text', x: o.x0 + o.length / 2, y: o.width / 2, text: c.label, size: 14 });
+    return shapes;
+  });
+}
+
+/** A container combination as background drawing (outlines) + its pile field. */
+export interface ContainerTemplate {
+  readonly id: string;
+  readonly containers: readonly ContainerType[];
+}
+
+/** Built-in templates: single containers and common pairs. */
+export const CONTAINER_TEMPLATES: readonly ContainerTemplate[] = [
+  { id: 'c10', containers: ['10'] },
+  { id: 'c20', containers: ['20'] },
+  { id: 'c40', containers: ['40'] },
+  { id: 'c10-20', containers: ['10', '20'] },
+  { id: 'c20-20', containers: ['20', '20'] },
+  { id: 'c20-40', containers: ['20', '40'] },
+  { id: 'c40-40', containers: ['40', '40'] },
+];
+
+export const containerTemplateName = (containers: readonly ContainerType[]): string =>
+  containers.map((t) => CONTAINERS[t].label).join(' + ');
+
+/** Instantiates a container template: the outline drawing and the generated pile field. */
+export function instantiateContainers(
+  containers: readonly ContainerType[],
+  piles: { head: number; inset: number },
+  id: string,
+): { background: BackgroundDrawing; design: PileDesign } {
+  return {
+    background: {
+      id,
+      name: containerTemplateName(containers),
+      shapes: containerShapes(containers),
+      offset: { x: 0, y: 0 },
+      rotation: 0,
+      visible: true,
+      locked: true,
+    },
+    design: generateDesign({ containers, ...piles }),
+  };
 }

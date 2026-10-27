@@ -132,3 +132,32 @@ export function removeEntities<E extends Element>(doc: CadDocument<E>, r: Remova
 }
 
 export const pointOf = (doc: CadDocument, id: string): Point | undefined => doc.points.find((p) => p.id === id);
+
+/**
+ * Adds another document's geometry to this one, shifted by `offset`, with fresh ids (so the same
+ * template can be added twice). Constraints keep pointing at the right copies; anchors move along.
+ */
+export function mergeDocuments<E extends Element>(
+  target: CadDocument<E>,
+  incoming: CadDocument<E>,
+  offset: Vec2,
+  newId: (prefix: string) => string,
+): CadDocument<E> {
+  const pid = new Map(incoming.points.map((p) => [p.id, newId('pt')]));
+  const lid = new Map(incoming.lines.map((l) => [l.id, newId('l')]));
+  const P = (id: string) => pid.get(id) ?? id;
+  const REF_KEYS = new Set(['p', 'a', 'b', 'c', 'd', 'ref']);
+  const constraints = incoming.constraints.map((c) => {
+    const moved = Object.fromEntries(
+      Object.entries(c).map(([k, v]) => [k, REF_KEYS.has(k) && typeof v === 'string' ? P(v) : v]),
+    ) as CadConstraint;
+    const shifted = moved.kind === 'fix' ? { ...moved, x: moved.x + offset.x, y: moved.y + offset.y } : moved;
+    return { ...shifted, id: newId('k'), ...(c.via ? { via: c.via.map((v) => lid.get(v) ?? v) } : {}) } as CadConstraint;
+  });
+  return {
+    points: [...target.points, ...incoming.points.map((p) => ({ ...p, id: P(p.id), x: p.x + offset.x, y: p.y + offset.y }))],
+    lines: [...target.lines, ...incoming.lines.map((l) => ({ ...l, id: lid.get(l.id)!, a: P(l.a), b: P(l.b) }))],
+    constraints: [...target.constraints, ...constraints],
+    elements: [...target.elements, ...incoming.elements.map((e) => ({ ...e, id: newId(e.type.slice(0, 1)), point: P(e.point) }))],
+  };
+}

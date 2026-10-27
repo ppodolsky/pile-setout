@@ -4,3 +4,4 @@ export * from './SelectionToolbar';
 export * from './editor';
 export * from './meta';
 export * from './ops';
+export * from './BackgroundLayer';

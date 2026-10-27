@@ -8,6 +8,8 @@ import {
   computePlan,
   distance,
   dragPoint,
+  drawingExtent,
+  mergeDocuments,
   emptyMeasurement,
   pairKey,
   pilesOf,
@@ -25,17 +27,22 @@ import {
   type PileDesign,
   type PileElement,
   type Removal,
-  type TemplateSpec,
+  type BackgroundDrawing,
   type Vec2,
 } from './deps';
-import { migrateV1, migrateV2, migrateV3, V1_KEY } from './migrate';
-import { designFromTemplate, newProject, type DesignState, type ProjectData } from './project';
+import { migrateV1, migrateV2, migrateV3, migrateV4, V1_KEY } from './migrate';
+import { newProject, type DesignState, type ProjectData } from './project';
+import type { TemplateContent } from './templates';
 
 export interface ProjectActions {
-  // ---- design (a CAD document whose elements are piles) ----
-  setTemplate(patch: Partial<TemplateSpec>): void;
-  /** Replaces the plan with the one generated from the template. */
-  regenerate(): void;
+  // ---- design: background drawings + a pile field (a CAD document whose elements are piles) ----
+  /** Starts the design from a template (replaces drawings and piles). */
+  useTemplate(content: TemplateContent, defaults?: DesignState['defaults']): void;
+  /** Adds a template next to what is there (to the right). */
+  addTemplate(content: TemplateContent): void;
+  updateBackground(id: string, patch: Partial<Omit<BackgroundDrawing, 'id' | 'shapes'>>): void;
+  removeBackground(id: string): void;
+  setDefaults(patch: Partial<DesignState['defaults']>): void;
   /** A new point (bare, or with a pile on it) plus auto-constraints from snapping. */
   place(kind: 'point' | 'pile', at: Vec2, infer?: (id: string) => ConstraintDraft[], setout?: PileElement['setout']): string;
   addLine(a: string, b: string): string;
@@ -122,9 +129,9 @@ function ensureRows(s: ProjectStore): Measurement[] {
   return [...s.fieldwork.measurements, ...missing.map((p) => emptyMeasurement(uid('m'), p.a, p.b))];
 }
 
-/** Updates the design document (marks it edited). */
+/** Updates the pile field. */
 const edit = (s: ProjectStore, doc: PileDesign): Pick<ProjectData, 'design' | 'fieldwork'> => ({
-  design: { ...s.design, doc, edited: true },
+  design: { ...s.design, doc },
   fieldwork: prune(s.fieldwork, doc),
 });
 
@@ -142,19 +149,35 @@ export const useProject = create<ProjectStore>()(
           useProject.temporal.getState().clear();
         },
 
-        setTemplate: (patch) =>
+        useTemplate: (content, defaults) =>
           set((s) => {
-            const template = { ...s.design.template, ...patch };
-            if (s.design.edited) return { design: { ...s.design, template } };
-            const design = designFromTemplate(template);
-            return { design, fieldwork: prune(s.fieldwork, design.doc) };
+            const doc = solveDocument(content.doc).doc;
+            return {
+              design: { backgrounds: content.backgrounds, doc, defaults: defaults ?? s.design.defaults },
+              fieldwork: prune(s.fieldwork, doc),
+            };
           }),
 
-        regenerate: () =>
+        addTemplate: (content) =>
           set((s) => {
-            const design: DesignState = designFromTemplate(s.design.template);
-            return { design, fieldwork: prune(s.fieldwork, design.doc) };
+            // to the right of everything drawn so far, with a 2 m gap
+            const xs = [...s.design.doc.points.map((p) => p.x), ...drawingExtent(s.design.backgrounds).map((p) => p.x)];
+            const offset = { x: xs.length ? Math.max(...xs) + 2000 : 0, y: 0 };
+            const before = new Set(s.design.doc.elements.map((e) => e.id));
+            let doc = mergeDocuments(s.design.doc, content.doc, offset, (p) => uid(p));
+            // continue the pile numbering (C7, C8 …) instead of repeating C1 …
+            let next = s.design.doc.elements.length;
+            doc = { ...doc, elements: doc.elements.map((e) => (before.has(e.id) ? e : { ...e, label: `C${++next}` })) };
+            const backgrounds = content.backgrounds.map((b) => ({ ...b, offset: { x: b.offset.x + offset.x, y: b.offset.y + offset.y } }));
+            return { design: { ...s.design, backgrounds: [...s.design.backgrounds, ...backgrounds], doc: solveDocument(doc).doc } };
           }),
+
+        updateBackground: (id, patch) =>
+          set((s) => ({ design: { ...s.design, backgrounds: s.design.backgrounds.map((b) => (b.id === id ? { ...b, ...patch } : b)) } })),
+
+        removeBackground: (id) => set((s) => ({ design: { ...s.design, backgrounds: s.design.backgrounds.filter((b) => b.id !== id) } })),
+
+        setDefaults: (patch) => set((s) => ({ design: { ...s.design, defaults: { ...s.design.defaults, ...patch } } })),
 
         place: (kind, at, infer, setout = 'measure') => {
           const point = uid('pt');
@@ -166,7 +189,7 @@ export const useProject = create<ProjectStore>()(
                 ...doc,
                 elements: [
                   ...doc.elements,
-                  { id: uid('p'), type: 'pile', point, label: nextLabel(d), head: s.design.template.head, setout },
+                  { id: uid('p'), type: 'pile', point, label: nextLabel(d), head: s.design.defaults.head, setout },
                 ],
               };
             if (infer) doc = addDocConstraints(doc, infer(point), () => uid('k')).doc;
@@ -188,7 +211,7 @@ export const useProject = create<ProjectStore>()(
             if (d.elements.some((e) => e.point === point)) return {};
             return edit(s, {
               ...d,
-              elements: [...d.elements, { id, type: 'pile', point, label: nextLabel(d), head: s.design.template.head, setout: 'measure' }],
+              elements: [...d.elements, { id, type: 'pile', point, label: nextLabel(d), head: s.design.defaults.head, setout: 'measure' }],
             });
           });
           return id;
@@ -304,13 +327,14 @@ export const useProject = create<ProjectStore>()(
     ),
     {
       name: PROJECT_KEY,
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ design: s.design, fieldwork: s.fieldwork, view: s.view, sketch: s.sketch }),
       migrate: (persisted, version) => {
         const raw = persisted as Record<string, unknown>;
         if (version < 3) return migrateV2(raw);
         if (version < 4) return migrateV3(raw);
+        if (version < 5) return migrateV4(raw);
         return raw as unknown as ProjectData;
       },
     },

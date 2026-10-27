@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { snapPoint, type Element, type EntityRef, type Guide, type SnapResult } from '@buildkit/cad';
+import { snapPoint, type Element, type EntityRef, type Guide, type SnapContext, type SnapResult } from '@buildkit/cad';
 import { bounds, expandBox, type Box, type Vec2 } from '@buildkit/geometry';
 import { Grid, toScreen, toWorld, useView, Viewport } from '@/drawing';
 import { fmt } from '@/lib/format';
@@ -22,6 +22,8 @@ export interface CadCanvasProps<E extends Element> {
   readonly showConstraints: boolean;
   /** Size of the placement ghost for domain tools, mm (e.g. a pile head). */
   readonly ghostSize?: number;
+  /** Reference geometry to snap to without constraints (background drawings). */
+  readonly reference?: SnapContext['reference'];
 }
 
 /**
@@ -29,6 +31,9 @@ export interface CadCanvasProps<E extends Element> {
  * Shift/multi, box), dragging through the solver with snapping, and drawing tools (point, line,
  * domain placement) with magnetic snapping and auto-constraints.
  */
+/** Reference geometry (background drawings) for snapping, shared with the canvas' handles. */
+const Reference = createContext<SnapContext['reference']>(undefined);
+
 export function CadCanvas<E extends Element>({
   model,
   ops,
@@ -38,6 +43,7 @@ export function CadCanvas<E extends Element>({
   extent,
   showConstraints,
   ghostSize,
+  reference,
 }: CadCanvasProps<E>) {
   const { doc, status } = model;
   const editor = useCadEditor();
@@ -66,73 +72,75 @@ export function CadCanvas<E extends Element>({
   };
 
   return (
-    <Viewport
-      label={label}
-      content={content}
-      padding={64}
-      className="h-full min-h-[320px]"
-      cursor={placing ? 'crosshair' : 'default'}
-      onPointerWorld={setCursor}
-      onBackgroundClick={(p, v) => {
-        if (!placing) {
-          select([]);
-          selectConstraint(null);
-          return;
-        }
-        const s = snapPoint(p, { points: doc.points, lines: doc.lines, scale: v.s, anchor });
-        if (s.point) return pickPoint(s.point);
-        const id = ops.place(tool === 'line' ? 'point' : tool, s.at, s.infer);
-        if (tool === 'line') {
-          if (lineStart) ops.addLine(lineStart, id);
-          setLineStart(id);
-        } else select([{ kind: 'point', id }]);
-      }}
-      onBox={(b, done, additive) => {
-        if (placing) return;
-        if (!boxBase.current.length || !additive) boxBase.current = additive ? selection : [];
-        const [x0, x1] = [Math.min(b.a.x, b.b.x), Math.max(b.a.x, b.b.x)];
-        const [y0, y1] = [Math.min(b.a.y, b.b.y), Math.max(b.a.y, b.b.y)];
-        const inside = new Set(doc.points.filter((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1).map((p) => p.id));
-        const refs: EntityRef[] = [
-          ...[...inside].map((id) => ({ kind: 'point' as const, id })),
-          ...doc.lines.filter((l) => inside.has(l.a) && inside.has(l.b)).map((l) => ({ kind: 'line' as const, id: l.id })),
-        ];
-        const all = [...boxBase.current, ...refs.filter((r) => !isSelected(boxBase.current, r))];
-        select(all);
-        if (done) boxBase.current = [];
-      }}
-    >
-      <Grid />
-      {background}
-      <Lines model={model} />
-      {showConstraints && (
-        <ConstraintGlyphs
-          points={doc.points}
-          constraints={doc.constraints}
-          conflicts={status.conflicts}
-          selected={constraint}
-          onPick={selectConstraint}
-        />
-      )}
-      {elements}
-      <BarePoints model={model} />
-      <SelectionMarks model={model} />
-      {doc.lines.map((l) => (
-        <LineHandle key={l.id} model={model} id={l.id} />
-      ))}
-      {doc.points.map((p) => (
-        <PointHandle key={p.id} model={model} ops={ops} id={p.id} onPick={pickPoint} />
-      ))}
-      {placing && cursor && (
-        <PlacementGhost
-          model={model}
-          at={cursor}
-          anchor={anchor}
-          size={tool === 'point' || tool === 'line' ? 0 : (ghostSize ?? 0)}
-          rubberFrom={tool === 'line' ? anchor : null}
-        />
-      )}
-    </Viewport>
+    <Reference.Provider value={reference}>
+      <Viewport
+        label={label}
+        content={content}
+        padding={64}
+        className="h-full min-h-[320px]"
+        cursor={placing ? 'crosshair' : 'default'}
+        onPointerWorld={setCursor}
+        onBackgroundClick={(p, v) => {
+          if (!placing) {
+            select([]);
+            selectConstraint(null);
+            return;
+          }
+          const s = snapPoint(p, { points: doc.points, lines: doc.lines, scale: v.s, anchor, reference });
+          if (s.point) return pickPoint(s.point);
+          const id = ops.place(tool === 'line' ? 'point' : tool, s.at, s.infer);
+          if (tool === 'line') {
+            if (lineStart) ops.addLine(lineStart, id);
+            setLineStart(id);
+          } else select([{ kind: 'point', id }]);
+        }}
+        onBox={(b, done, additive) => {
+          if (placing) return;
+          if (!boxBase.current.length || !additive) boxBase.current = additive ? selection : [];
+          const [x0, x1] = [Math.min(b.a.x, b.b.x), Math.max(b.a.x, b.b.x)];
+          const [y0, y1] = [Math.min(b.a.y, b.b.y), Math.max(b.a.y, b.b.y)];
+          const inside = new Set(doc.points.filter((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1).map((p) => p.id));
+          const refs: EntityRef[] = [
+            ...[...inside].map((id) => ({ kind: 'point' as const, id })),
+            ...doc.lines.filter((l) => inside.has(l.a) && inside.has(l.b)).map((l) => ({ kind: 'line' as const, id: l.id })),
+          ];
+          const all = [...boxBase.current, ...refs.filter((r) => !isSelected(boxBase.current, r))];
+          select(all);
+          if (done) boxBase.current = [];
+        }}
+      >
+        <Grid />
+        {background}
+        <Lines model={model} />
+        {showConstraints && (
+          <ConstraintGlyphs
+            points={doc.points}
+            constraints={doc.constraints}
+            conflicts={status.conflicts}
+            selected={constraint}
+            onPick={selectConstraint}
+          />
+        )}
+        {elements}
+        <BarePoints model={model} />
+        <SelectionMarks model={model} />
+        {doc.lines.map((l) => (
+          <LineHandle key={l.id} model={model} id={l.id} />
+        ))}
+        {doc.points.map((p) => (
+          <PointHandle key={p.id} model={model} ops={ops} id={p.id} onPick={pickPoint} />
+        ))}
+        {placing && cursor && (
+          <PlacementGhost
+            model={model}
+            at={cursor}
+            anchor={anchor}
+            size={tool === 'point' || tool === 'line' ? 0 : (ghostSize ?? 0)}
+            rubberFrom={tool === 'line' ? anchor : null}
+          />
+        )}
+      </Viewport>
+    </Reference.Provider>
   );
 }
 
@@ -266,7 +274,8 @@ function PointHandle<E extends Element>({
 }) {
   const v = useView();
   const { tool, selection, select, toggle, multi } = useCadEditor();
-  const drag = useRef<{ dx: number; dy: number; x: number; y: number; moved: boolean } | null>(null);
+  const reference = useContext(Reference);
+  const drag = useRef<{ dx: number; dy: number; x: number; y: number; moved: boolean; narrow: boolean } | null>(null);
   const [snap, setSnap] = useState<SnapResult | null>(null);
   const p = model.doc.points.find((q) => q.id === id)!;
   const s = toScreen(v, p);
@@ -290,11 +299,14 @@ function PointHandle<E extends Element>({
           const ref = { kind: 'point' as const, id };
           if (tool !== 'select') return onPick(id);
           if (multi || e.shiftKey || e.metaKey || e.ctrlKey) return toggle(ref);
+          // a click on a pile already in a multi-selection narrows the selection to it on release
+          // (unless it turns into a drag)
+          const narrow = isSelected(selection, ref) && selection.length > 1;
           if (!isSelected(selection, ref)) select([ref]);
           e.currentTarget.setPointerCapture(e.pointerId);
           const q = local(e);
           const w = toWorld(v, q.x, q.y);
-          drag.current = { dx: p.x - w.x, dy: p.y - w.y, x: q.x, y: q.y, moved: false };
+          drag.current = { dx: p.x - w.x, dy: p.y - w.y, x: q.x, y: q.y, moved: false, narrow };
         }}
         onPointerMove={(e) => {
           const d = drag.current;
@@ -305,12 +317,13 @@ function PointHandle<E extends Element>({
           const w = toWorld(v, q.x, q.y);
           const sn = snapPoint(
             { x: w.x + d.dx, y: w.y + d.dy },
-            { points: model.doc.points, lines: model.doc.lines, scale: v.s, exclude: new Set([id]) },
+            { points: model.doc.points, lines: model.doc.lines, scale: v.s, exclude: new Set([id]), reference },
           );
           setSnap(sn);
           ops.movePoint(id, sn.at);
         }}
         onPointerUp={() => {
+          if (drag.current?.narrow && !drag.current.moved) select([{ kind: 'point', id }]);
           drag.current = null;
           setSnap(null);
         }}
@@ -377,7 +390,8 @@ function PlacementGhost<E extends Element>({
 }) {
   const { t } = useTranslation('cad');
   const v = useView();
-  const s = snapPoint(at, { points: model.doc.points, lines: model.doc.lines, scale: v.s, anchor });
+  const reference = useContext(Reference);
+  const s = snapPoint(at, { points: model.doc.points, lines: model.doc.lines, scale: v.s, anchor, reference });
   const q = toScreen(v, s.at);
   const h = (size * v.s) / 2;
   const coords = t('coords', { x: fmt(Math.round(s.at.x), 0), y: fmt(Math.round(s.at.y), 0) });

@@ -81,4 +81,11 @@ export const cad: Translation<typeof en> = {
     onLine: 'на линии',
   },
   coords: '{{x}}; {{y}}',
+  background: {
+    titles: {
+      Container: 'Контейнер',
+      'Corner casting': 'Угловой фитинг (178 × 162)',
+      'Forklift pocket': 'Карман под вилы погрузчика (схематично)',
+    },
+  },
 };
